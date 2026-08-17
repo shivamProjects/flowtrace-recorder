@@ -32,9 +32,15 @@ export const DATE_HEADERS = [
   '[class*="header"] span', 'th[colspan]', '.x11d', '.x11e', 'table span[id]',
 ];
 
-/** Choice-list options rendered by af:selectOneChoice. */
+/** Choice-list options rendered by af:selectOneChoice or Oracle JET oj-select-single. */
 export const CHOICE_OPTION =
   '[role="option"], .af_selectOneChoice-item, [id*="selectOneChoice"] li';
+
+/**
+ * Oracle JET combobox/select host custom elements.
+ * A click on an [role="option"] inside one of these is a selectOption action.
+ */
+export const JET_SELECT_HOST = 'oj-select-single, oj-combobox-one, oj-select-many';
 
 /** Anything that can open a list of values or a picker dialog. */
 export const LOV_TRIGGER =

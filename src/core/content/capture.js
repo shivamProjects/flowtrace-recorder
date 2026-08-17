@@ -13,7 +13,7 @@
 import { safeInvoke } from '../shared/patch-api.js';
 import { isSensitiveField, maskedFields, maskEvent } from '../shared/sensitive.js';
 import { makeNavigateEvent } from '../shared/types.js';
-import { cleanLabel, cleanText, resolveLabel, roleOf } from './dom.js';
+import { cleanLabel, cleanText, resolveLabel, retargetToInteractive, roleOf } from './dom.js';
 import { buildLocatorObject } from './locator-object.js';
 import { generateSelector } from './selector.js';
 import { frameInfo } from './frames.js';
@@ -183,7 +183,8 @@ function onClick(e) {
   // <select> is handled on 'change', where the chosen option is known.
   if (target.tagName === 'SELECT') return;
 
-  send(makeEvent('click', target));
+  const interactive = retargetToInteractive(target);
+  send(makeEvent('click', interactive || target));
 }
 
 function onInput(e) {

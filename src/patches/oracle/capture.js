@@ -17,8 +17,8 @@ import { cleanText, normaliseFieldName } from '../../core/content/dom.js';
 import { resolveAdfLabel } from './labels.js';
 import {
   CHOICE_OPTION, COMMIT_BUTTON, COMMIT_TEXT, DATE_HEADERS, DATE_PICKER, DIALOG,
-  FIELD_CONTAINER, FIELD_WRAPPER, LOV_POPUP, LOV_TRIGGER, NAV_TILE, NAV_TILE_CHILD,
-  REQUIRED_MARKER,
+  FIELD_CONTAINER, FIELD_WRAPPER, JET_SELECT_HOST, LOV_POPUP, LOV_TRIGGER, NAV_TILE,
+  NAV_TILE_CHILD, REQUIRED_MARKER,
 } from './selectors.js';
 
 const TRIGGER_MEMORY_MS = 8_000;
@@ -261,17 +261,56 @@ function hasAdjacentLovIcon(el) {
  * af:selectOneChoice renders its options as a floating list that is not a
  * <select>. Clicking an option is a selection against the FIELD, so the event
  * is emitted against the trigger with the option as its value.
+ *
+ * Oracle JET oj-select-single/oj-combobox-one also renders options as
+ * [role="option"] elements inside a popup. These are normalised to
+ * `selectOption` (a stable, replay-safe action) rather than a positional click.
+ *
  * @returns {boolean} true when handled
  */
 function claimChoiceListOption(target, ctx) {
   const option = target.closest(CHOICE_OPTION);
   if (!option) return false;
+
+  const optionText = option.textContent.trim();
+  if (!optionText) return false;
+
+  // ── Oracle JET oj-select-single / oj-combobox-one ────────────────────────
+  // JET renders the dropdown in a popup detached from the host element. Walk
+  // the event's composed path to find the host, or fall back to document query.
+  const jetHost = (() => {
+    // 1. Direct ancestor (when popup is rendered inside shadow DOM of host)
+    const direct = target.closest ? target.closest(JET_SELECT_HOST) : null;
+    if (direct) return direct;
+    // 2. Find the currently open JET select that has focus
+    return document.querySelector(`${JET_SELECT_HOST}[open], ${JET_SELECT_HOST}[aria-expanded="true"]`);
+  })();
+
+  if (jetHost) {
+    const hostLabel = resolveAdfLabel(jetHost) ||
+      jetHost.getAttribute('aria-label') ||
+      jetHost.getAttribute('label') ||
+      jetHost.getAttribute('label-hint') ||
+      jetHost.id || '';
+
+    ctx.emit(ctx.makeEvent('selectOption', jetHost, {
+      value: optionText,
+      meta: {
+        optionLabel: optionText,
+        selectByClick: true,
+        jetHost: jetHost.tagName.toLowerCase(),
+        triggerSelector: ctx.selectorFor(jetHost).selector,
+      },
+    }));
+    return true;
+  }
+
+  // ── ADF af:selectOneChoice ────────────────────────────────────────────────
   if (!state.lastTrigger) return false;
   if (Date.now() - state.lastTriggerAt > TRIGGER_MEMORY_MS) return false;
 
-  const optionText = option.textContent.trim();
   const triggerLabel = resolveAdfLabel(state.lastTrigger);
-  if (!optionText || !triggerLabel) return false;
+  if (!triggerLabel) return false;
 
   // Prefer a locator that names the option; fall back to the role form when the
   // generated one is positional and would not survive a re-render.

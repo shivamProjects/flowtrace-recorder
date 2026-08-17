@@ -206,8 +206,18 @@
       background: linear-gradient(135deg, #f05a77, #d0405f);
     }
 
+    .btn-pause {
+      grid-column: span 3;
+      background: rgba(245,166,35,0.15);
+      color: var(--warn);
+      border: 1px solid rgba(245,166,35,0.25);
+    }
+    .btn-pause:not(:disabled):hover {
+      background: rgba(245,166,35,0.25);
+    }
+
     .btn-clear {
-      grid-column: span 2;
+      grid-column: span 3;
       background: rgba(139,147,173,0.12);
       color: var(--text-2);
       border: 1px solid var(--border);
@@ -217,7 +227,7 @@
     }
 
     .btn-copy {
-      grid-column: span 2;
+      grid-column: span 3;
       background: rgba(45,206,124,0.15);
       color: var(--success);
       border: 1px solid rgba(45,206,124,0.25);
@@ -644,13 +654,20 @@
         <circle cx="8" cy="8" r="6" stroke="white" stroke-width="1.5"/>
         <circle cx="8" cy="8" r="3" fill="white"/>
       </svg>
-      Start Recording
+      Start
+    </button>
+    <button id="btn-pause" class="btn btn-pause" disabled>
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/>
+        <rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/>
+      </svg>
+      Pause
     </button>
     <button id="btn-stop" class="btn btn-stop" disabled>
       <svg class="icon" viewBox="0 0 16 16" fill="none">
         <rect x="4" y="4" width="8" height="8" rx="1.5" fill="white"/>
       </svg>
-      Stop Recording
+      Stop
     </button>
     <button id="btn-clear" class="btn btn-clear">
       <svg class="icon" viewBox="0 0 16 16" fill="none">
@@ -658,24 +675,54 @@
       </svg>
       Clear
     </button>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-export-json" class="btn btn-export" disabled title="Download actions.json for replayer">
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <path d="M3 13h10M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      JSON
+    </button>
+    <button id="btn-export-js" class="btn btn-export" disabled title="Download standalone Playwright script">
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <path d="M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M6 7l2 2-2 2M10 11h-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Script
+    </button>
     <button id="btn-copy" class="btn btn-copy" disabled>
       <svg class="icon" viewBox="0 0 16 16" fill="none">
         <rect x="5" y="5" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
         <path d="M3 11V3.5A1.5 1.5 0 014.5 2H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Copy Code
+      Copy
     </button>
     <button id="btn-save" class="btn btn-save" disabled>
       <svg class="icon" viewBox="0 0 16 16" fill="none">
         <path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Save to App
+      Save
     </button>
+  </div>
+
+  <!-- Live Step Timeline -->
+  <div class="timeline-container" id="timeline-box">
+    <div class="timeline-header">
+      <span>Recorded Steps (<span id="timeline-count">0</span>)</span>
+      <span id="timeline-hint" style="font-size: 10px; color: var(--text-3);">Live Stream</span>
+    </div>
+    <div class="step-list" id="step-list">
+      <div style="padding: 10px; text-align: center; color: var(--text-3); font-style: italic; font-size: 11px;">
+        No steps recorded yet. Click Start to begin.
+      </div>
+    </div>
   </div>
 
   <!-- Generated code -->
   <div class="code-header">
-    <span class="code-label">Generated Playwright Script</span>
+    <span class="code-label">Generated Script / Flow</span>
+    <span id="code-status" style="font-size: 10px; color: var(--text-3);">Playwright ready</span>
   </div>
   <div class="code-wrap">
     <textarea id="code-output" readonly

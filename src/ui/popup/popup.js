@@ -23,9 +23,15 @@
 
   // ── DOM refs ────────────────────────────────────────────────────────────
   const btnStart    = document.getElementById('btn-start');
+  const btnPause    = document.getElementById('btn-pause');
   const btnStop     = document.getElementById('btn-stop');
   const btnClear    = document.getElementById('btn-clear');
   const btnCopy     = document.getElementById('btn-copy');
+  const btnExportJson = document.getElementById('btn-export-json');
+  const btnExportJs   = document.getElementById('btn-export-js');
+  const stepList    = document.getElementById('step-list');
+  const timelineCount = document.getElementById('timeline-count');
+  const timelineHint = document.getElementById('timeline-hint');
   const statusPill  = document.getElementById('status-pill');
   const statusText  = document.getElementById('status-text');
   const headerMode  = document.getElementById('header-mode');
@@ -362,8 +368,14 @@
 
     if (session.generatedCode) codeOutput.value = session.generatedCode;
 
+    renderTimeline(session.events || []);
+
     if (session.isRecording) {
-      setUIState('recording');
+      if (session.isPaused) {
+        setUIState('paused');
+      } else {
+        setUIState('recording');
+      }
       startPolling();
     } else if ((session.eventCount || 0) > 0) {
       setUIState('stopped');
@@ -374,7 +386,7 @@
 
   // ─────────────────────────────────────────────────────────────────────────
   // UI state machine
-  // states: 'idle' | 'recording' | 'stopped'
+  // states: 'idle' | 'recording' | 'paused' | 'stopped'
   // ─────────────────────────────────────────────────────────────────────────
   function setUIState(state) {
     statusPill.className = `status-pill ${state}`;
@@ -385,10 +397,14 @@
         headerMode.textContent  = 'Ready';
         logoDot.className       = 'logo-dot';
         btnStart.disabled       = !haveEnvironment;
+        btnPause.disabled       = true;
+        btnPause.textContent    = 'Pause';
         btnStop.disabled        = true;
         btnClear.disabled       = false;
         btnCopy.disabled        = true;
         btnSave.disabled        = true;
+        btnExportJson.disabled  = true;
+        btnExportJs.disabled    = true;
         patchSelect.disabled    = false;
         envSelect.disabled      = false;
         break;
@@ -398,13 +414,32 @@
         headerMode.textContent  = 'Recording…';
         logoDot.className       = 'logo-dot recording';
         btnStart.disabled       = true;
+        btnPause.disabled       = false;
+        btnPause.textContent    = 'Pause';
         btnStop.disabled        = false;
         btnClear.disabled       = true;
         btnCopy.disabled        = true;
         btnSave.disabled        = true;
+        btnExportJson.disabled  = true;
+        btnExportJs.disabled    = true;
         patchSelect.disabled    = true;
-        // Locked for the same reason the worker refuses to change it: the id is
-        // stamped on the upload, so moving it now would misfile the recording.
+        envSelect.disabled      = true;
+        break;
+
+      case 'paused':
+        statusText.textContent  = 'Paused';
+        headerMode.textContent  = 'Paused';
+        logoDot.className       = 'logo-dot';
+        btnStart.disabled       = true;
+        btnPause.disabled       = false;
+        btnPause.textContent    = 'Resume';
+        btnStop.disabled        = false;
+        btnClear.disabled       = false;
+        btnCopy.disabled        = false;
+        btnSave.disabled        = true;
+        btnExportJson.disabled  = false;
+        btnExportJs.disabled    = false;
+        patchSelect.disabled    = true;
         envSelect.disabled      = true;
         break;
 
@@ -414,14 +449,82 @@
         logoDot.className       = 'logo-dot';
         statusPill.className    = 'status-pill stopped';
         btnStart.disabled       = !haveEnvironment;
+        btnPause.disabled       = true;
+        btnPause.textContent    = 'Pause';
         btnStop.disabled        = true;
         btnClear.disabled       = false;
         btnCopy.disabled        = false;
         btnSave.disabled        = false;
+        btnExportJson.disabled  = false;
+        btnExportJs.disabled    = false;
         patchSelect.disabled    = false;
         envSelect.disabled      = false;
         break;
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Live Step Timeline Rendering & Deletion
+  // ─────────────────────────────────────────────────────────────────────────
+  function renderTimeline(events) {
+    if (!stepList) return;
+    timelineCount.textContent = events.length;
+
+    if (!events || events.length === 0) {
+      stepList.innerHTML = `
+        <div style="padding: 10px; text-align: center; color: var(--text-3); font-style: italic; font-size: 11px;">
+          No steps recorded yet. Click Start to begin.
+        </div>
+      `;
+      return;
+    }
+
+    stepList.innerHTML = events.map((evt, idx) => {
+      const type = (evt.type || 'action').toLowerCase();
+      const verbClass = `verb-${type}`;
+      const label = evt.label || evt.text || evt.selector || (evt.meta && evt.meta.url) || 'interaction';
+      const valStr = evt.value ? ` "${evt.value}"` : '';
+
+      return `
+        <div class="step-item" data-index="${idx}">
+          <span class="step-num">#${idx + 1}</span>
+          <span class="step-verb ${verbClass}">${type}</span>
+          <span class="step-desc" title="${escapeHtml(label + valStr)}">${escapeHtml(label + valStr)}</span>
+          <button class="step-del" data-del="${idx}" title="Delete this step">×</button>
+        </div>
+      `;
+    }).join('');
+
+    stepList.querySelectorAll('button[data-del]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const idx = Number(btn.getAttribute('data-del'));
+        await deleteStep(idx);
+      });
+    });
+
+    // Auto-scroll to bottom of timeline
+    stepList.scrollTop = stepList.scrollHeight;
+  }
+
+  async function deleteStep(index) {
+    const resp = await sendBg({ action: 'DELETE_STEP', index });
+    if (resp && resp.success) {
+      eventCount.textContent = resp.eventCount || 0;
+      if (resp.generatedCode) codeOutput.value = resp.generatedCode;
+      renderTimeline(resp.events || []);
+      showToast(`Deleted step #${index + 1}`);
+    } else {
+      showToast(`⚠ ${(resp && resp.error) || 'Could not delete step.'}`);
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -530,6 +633,27 @@
   });
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Pause / Resume recording
+  // ─────────────────────────────────────────────────────────────────────────
+  btnPause.addEventListener('click', async () => {
+    const isCurrentlyPaused = statusPill.classList.contains('paused');
+    const action = isCurrentlyPaused ? 'RESUME_RECORDING' : 'PAUSE_RECORDING';
+    const resp = await sendBg({ action });
+
+    if (resp && resp.success) {
+      if (resp.isPaused) {
+        setUIState('paused');
+        showToast('⏸ Recording paused');
+      } else {
+        setUIState('recording');
+        showToast('▶ Recording resumed');
+      }
+    } else {
+      showToast(`⚠ ${(resp && resp.error) || 'Failed to toggle pause.'}`);
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Stop recording
   // ─────────────────────────────────────────────────────────────────────────
   btnStop.addEventListener('click', async () => {
@@ -560,6 +684,7 @@
     const resp = await sendBg({ action: 'CLEAR_RECORDING' });
     codeOutput.value = '';
     eventCount.textContent = '0';
+    renderTimeline([]);
     // Preserve the patch selection after clear
     if (resp && resp.patchId) {
       const opt = patchSelect.querySelector(`option[value="${resp.patchId}"]`);
@@ -569,6 +694,50 @@
     setUIState('idle');
     showToast('Session cleared');
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Export actions.json (for direct Replayer execution)
+  // ─────────────────────────────────────────────────────────────────────────
+  btnExportJson.addEventListener('click', async () => {
+    const statusResp = await sendBg({ action: 'GET_STATUS' });
+    const s = (statusResp && statusResp.session) || {};
+    const actionsData = s.actions || s.events || [];
+
+    if (!actionsData || actionsData.length === 0) {
+      showToast('⚠ No actions to export.');
+      return;
+    }
+
+    const payload = JSON.stringify(actionsData, null, 2);
+    downloadFile(payload, 'flowtrace-actions.json', 'application/json');
+    showToast('✓ actions.json downloaded');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Export Playwright Spec Script
+  // ─────────────────────────────────────────────────────────────────────────
+  btnExportJs.addEventListener('click', () => {
+    const code = codeOutput.value.trim();
+    if (!code || (code.startsWith('//') && code.split('\n').length < 4)) {
+      showToast('⚠ No script to export.');
+      return;
+    }
+
+    downloadFile(code, 'flowtrace-recording.spec.js', 'text/javascript');
+    showToast('✓ Playwright script downloaded');
+  });
+
+  function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Copy code to clipboard

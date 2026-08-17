@@ -17,6 +17,7 @@ const PREFERENCE_KEY = 'preferredPatchId';
 export function blankSession(patchId = DEFAULT_PATCH_ID) {
   return {
     isRecording: false,
+    isPaused: false,
     activeTabId: null,
     startedAt: null,
     sourceUrl: null,
@@ -103,11 +104,13 @@ export function mergePatchContext(partial) {
 export function forTransport() {
   return {
     isRecording: session.isRecording,
+    isPaused: !!session.isPaused,
     activeTabId: session.activeTabId,
     startedAt: session.startedAt,
     sourceUrl: session.sourceUrl,
     patchId: session.patchId,
     eventCount: session.events.length,
+    events: session.events,
     processedCount: session.processedEvents.length,
     generatedCode: session.generatedCode,
     steps: session.steps,

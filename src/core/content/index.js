@@ -7,6 +7,7 @@
  */
 
 import { getPatch } from '../../patches/index.js';
+import { autoFillLogin } from './auto-login.js';
 import { startCapture, stopCapture } from './capture.js';
 import { isTopFrame } from './frames.js';
 import { mountWidget, setWidgetCount, unmountWidget } from './widget.js';
@@ -31,6 +32,18 @@ function main() {
       sendResponse({ ok: true, patchContext: deactivate() });
     } else if (msg.action === 'PING') {
       sendResponse({ alive: true, recording: bus.isRecording() });
+    } else if (msg.action === 'AUTO_FILL_LOGIN') {
+      // Safety guard: autoFillLogin dispatches synthetic `input` events.
+      // capture.js deliberately does not filter isTrusted, so firing while
+      // a session is active would push plaintext credentials onto the bus.
+      if (bus.isRecording()) {
+        sendResponse({ success: false, error: 'Cannot auto-fill while recording is active.' });
+        return false;
+      }
+      autoFillLogin(msg.username, msg.password, { submit: !!msg.submit })
+        .then((res) => sendResponse(res))
+        .catch((err) => sendResponse({ success: false, error: String(err.message || err) }));
+      return true; // async sendResponse
     }
     return false;
   });

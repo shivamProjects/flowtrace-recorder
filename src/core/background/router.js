@@ -44,6 +44,50 @@ export function createRouter(patches) {
     START_RECORDING: (msg) => startRecording(msg, patches),
     STOP_RECORDING: () => stopRecording(patches),
 
+    PAUSE_RECORDING: async () => {
+      const s = session.get();
+      if (!s.isRecording) return { success: false, error: 'Not recording.' };
+      s.isPaused = true;
+      await session.persist();
+      return { success: true, isPaused: true };
+    },
+
+    RESUME_RECORDING: async () => {
+      const s = session.get();
+      if (!s.isRecording) return { success: false, error: 'Not recording.' };
+      s.isPaused = false;
+      await session.persist();
+      return { success: true, isPaused: false };
+    },
+
+    DELETE_STEP: async (msg) => {
+      const s = session.get();
+      const idx = Number(msg.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= s.events.length) {
+        return { success: false, error: 'Invalid step index.' };
+      }
+      s.events.splice(idx, 1);
+      await session.persist();
+
+      // If recording is stopped, re-compile so generated code and steps reflect deletion
+      if (!s.isRecording && s.events.length > 0) {
+        await compile(patches);
+      } else if (!s.isRecording && s.events.length === 0) {
+        s.generatedCode = '';
+        s.steps = [];
+        s.actions = [];
+        s.processedEvents = [];
+        await session.persist();
+      }
+
+      return {
+        success: true,
+        eventCount: s.events.length,
+        events: s.events,
+        generatedCode: s.generatedCode,
+      };
+    },
+
     CLEAR_RECORDING: async () => {
       await session.clear();
       return { success: true, patchId: session.get().patchId };
@@ -51,7 +95,7 @@ export function createRouter(patches) {
 
     RECORD_EVENT: async (msg, sender) => {
       const s = session.get();
-      if (!s.isRecording) return { accepted: false };
+      if (!s.isRecording || s.isPaused) return { accepted: false };
       if (sender.tab && sender.tab.id !== s.activeTabId) return { accepted: false };
 
       if (!shouldAccept(msg.event, s.events)) {
