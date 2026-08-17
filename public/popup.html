@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlowTrace Recorder</title>
+  <style>
+    /* ── Design tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg-0:       #0d0f14;
+      --bg-1:       #141720;
+      --bg-2:       #1c2030;
+      --bg-card:    #1a1e2e;
+      --border:     #2a3050;
+      --accent:     #4f8ef7;
+      --accent-glow:#3b6fd4;
+      --rec:        #e84c6a;
+      --rec-glow:   #c13357;
+      --success:    #2dce7c;
+      --warn:       #f5a623;
+      --text-1:     #e8ecf4;
+      --text-2:     #8b93ad;
+      --text-3:     #545c78;
+      --font:       'Inter', 'Segoe UI', system-ui, sans-serif;
+      --radius:     10px;
+      --radius-sm:  6px;
+      --transition: 0.18s ease;
+    }
+
+    /* ── Google Fonts (Inter) ─────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-0);
+      color: var(--text-1);
+      width: 380px;
+      min-height: 480px;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 12px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      flex-shrink: 0;
+    }
+
+    .logo-dot.recording {
+      background: var(--rec);
+      box-shadow: 0 0 10px var(--rec-glow);
+      animation: pulse 1.2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.6; transform: scale(1.3); }
+    }
+
+    .header-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text-1);
+    }
+
+    .header-subtitle {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-left: auto;
+    }
+
+    /* ── Status bar ───────────────────────────────────────────────────── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .status-pill.idle {
+      background: rgba(139,147,173,0.12);
+      color: var(--text-2);
+    }
+
+    .status-pill.recording {
+      background: rgba(232,76,106,0.18);
+      color: #f06b83;
+    }
+
+    .status-pill.stopped {
+      background: rgba(45,206,124,0.15);
+      color: var(--success);
+    }
+
+    .status-pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .event-count {
+      margin-left: auto;
+      color: var(--text-3);
+      font-size: 11.5px;
+    }
+
+    .event-count span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Tab URL display ──────────────────────────────────────────────── */
+    .tab-url {
+      padding: 7px 16px;
+      font-size: 11px;
+      color: var(--text-3);
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tab-url strong { color: var(--text-2); }
+
+    /* ── Button row ───────────────────────────────────────────────────── */
+    .btn-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      padding: 12px 14px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 12px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background var(--transition), opacity var(--transition), transform 0.1s;
+      outline: none;
+      user-select: none;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-start {
+      grid-column: span 3;
+      background: linear-gradient(135deg, #4f8ef7, #3b6fd4);
+      color: #fff;
+    }
+    .btn-start:not(:disabled):hover {
+      background: linear-gradient(135deg, #5c99ff, #4479e0);
+    }
+
+    .btn-stop {
+      grid-column: span 3;
+      background: linear-gradient(135deg, #e84c6a, #c13357);
+      color: #fff;
+    }
+    .btn-stop:not(:disabled):hover {
+      background: linear-gradient(135deg, #f05a77, #d0405f);
+    }
+
+    .btn-clear {
+      grid-column: span 2;
+      background: rgba(139,147,173,0.12);
+      color: var(--text-2);
+      border: 1px solid var(--border);
+    }
+    .btn-clear:not(:disabled):hover {
+      background: rgba(139,147,173,0.2);
+    }
+
+    .btn-copy {
+      grid-column: span 2;
+      background: rgba(45,206,124,0.15);
+      color: var(--success);
+      border: 1px solid rgba(45,206,124,0.25);
+    }
+    .btn-copy:not(:disabled):hover {
+      background: rgba(45,206,124,0.25);
+    }
+
+    .btn-save {
+      grid-column: span 2;
+      background: rgba(245,166,35,0.15);
+      color: var(--warn);
+      border: 1px solid rgba(245,166,35,0.25);
+    }
+    .btn-save:not(:disabled):hover {
+      background: rgba(245,166,35,0.25);
+    }
+
+    /* ── Code area ────────────────────────────────────────────────────── */
+    .code-header {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px 6px;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .code-label { font-weight: 500; color: var(--text-2); }
+
+    .code-wrap {
+      padding: 0 12px 12px;
+    }
+
+    textarea#code-output {
+      width: 100%;
+      height: 200px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: #b2e2c4;
+      font-family: 'Cascadia Code', 'Fira Mono', 'Consolas', monospace;
+      font-size: 10.5px;
+      line-height: 1.65;
+      padding: 10px 12px;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    textarea#code-output::placeholder {
+      color: var(--text-3);
+      font-style: italic;
+    }
+
+    /* ── Toast ────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 12px; left: 50%;
+      transform: translateX(-50%) translateY(40px);
+      background: #2b3050;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 7px 16px;
+      font-size: 12px;
+      color: var(--text-1);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    .footer {
+      padding: 8px 14px;
+      font-size: 10.5px;
+      color: var(--text-3);
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Environment selector row ────────────────────────────────────── */
+    .env-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px 8px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .env-label {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-2);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .env-select {
+      flex: 1;
+      appearance: none;
+      -webkit-appearance: none;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--accent);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 28px 5px 10px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color var(--transition);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b93ad' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+    }
+
+    .env-select:hover:not(:disabled) {
+      border-color: var(--accent);
+    }
+
+    .env-select:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Environment badge in status bar */
+    .env-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 8px;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      background: rgba(79,142,247,0.15);
+      color: var(--accent);
+      border: 1px solid rgba(79,142,247,0.25);
+      text-transform: uppercase;
+    }
+
+    /* Settings panel styling */
+    .btn-settings-toggle {
+      background: none;
+      border: none;
+      color: var(--text-2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 4px;
+      transition: color var(--transition), background var(--transition);
+      outline: none;
+    }
+    .btn-settings-toggle:hover {
+      color: var(--accent);
+      background: rgba(255,255,255,0.05);
+    }
+    .settings-icon {
+      width: 16px;
+      height: 16px;
+    }
+    .settings-panel {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+    .settings-panel.hidden {
+      display: none;
+    }
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .settings-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-2);
+    }
+    .settings-input {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 11.5px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .settings-input:focus {
+      border-color: var(--accent);
+    }
+    .btn-save-settings {
+      background: var(--accent);
+      color: white;
+      padding: 6px 12px;
+      font-size: 11.5px;
+      margin-top: 4px;
+      width: 100%;
+    }
+    .btn-save-settings:hover {
+      background: var(--accent-glow);
+    }
+
+    /* ── Sign-in ──────────────────────────────────────────────────────── */
+    .auth-screen {
+      padding: 22px 18px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .auth-screen.hidden { display: none; }
+
+    .auth-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+    .auth-subtitle {
+      font-size: 11.5px;
+      color: var(--text-3);
+      margin-bottom: 12px;
+    }
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .auth-error {
+      font-size: 11.5px;
+      color: #f06b83;
+      min-height: 14px;
+    }
+
+    /* Signed-in identity strip */
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 16px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .auth-user {
+      color: var(--text-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .auth-signout {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-3);
+      font-family: var(--font);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      outline: none;
+    }
+    .auth-signout:hover { color: var(--accent); background: rgba(255,255,255,0.05); }
+
+    #app-body.hidden { display: none; }
+    .hidden { display: none; }
+
+    /* ── Icon (inline SVG via data-uri style) ─────────────────────────── */
+    .icon { width: 14px; height: 14px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div id="logo-dot" class="logo-dot"></div>
+    <span class="header-title">FlowTrace Recorder</span>
+    <span class="header-subtitle" id="header-mode" style="margin-left: auto; margin-right: 8px;">Idle</span>
+    <button id="btn-settings" class="btn-settings-toggle" title="Settings panel">
+      <svg class="settings-icon" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 0-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 0 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 0 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 0 2.105-.872l.31.17c1.283-.698 2.686.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 0-.872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 0-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 0-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!--
+    Settings. Ownership of a recording is derived server-side from the token, so
+    there is nothing here to identify the customer or the user with — a typed-in
+    id would only be a way to claim someone else's.
+  -->
+  <div id="settings-panel" class="settings-panel hidden">
+    <div class="settings-group">
+      <label for="setting-api-base" class="settings-label">Platform API base</label>
+      <input type="url" id="setting-api-base" class="settings-input" placeholder="http://localhost:8080" />
+    </div>
+    <button id="btn-save-settings" class="btn btn-save-settings">Save Config</button>
+  </div>
+
+  <!--
+    Sign-in. This screen hides the recorder, but it is not what stops a
+    recording: the service worker refuses START_RECORDING without a valid token
+    regardless of what the popup shows.
+  -->
+  <div id="auth-screen" class="auth-screen hidden">
+    <div class="auth-title">Sign in</div>
+    <div class="auth-subtitle">The recorder is unavailable until you sign in.</div>
+
+    <!--
+      Username, not email. The platform's LoginRequest is (username, password)
+      and rejects an `email` key with a validation error.
+    -->
+    <form id="auth-form" class="auth-form">
+      <div class="settings-group">
+        <label for="auth-username" class="settings-label">Username</label>
+        <input type="text" id="auth-username" class="settings-input" autocomplete="username" required />
+      </div>
+      <div class="settings-group">
+        <label for="auth-password" class="settings-label">Password</label>
+        <input type="password" id="auth-password" class="settings-input" autocomplete="current-password" required />
+      </div>
+      <div id="auth-error" class="auth-error"></div>
+      <button type="submit" id="btn-sign-in" class="btn btn-save-settings">Sign in</button>
+    </form>
+
+    <!--
+      Step two, shown only when the account has MFA enabled. The first step
+      returns no token at all in that case, so this is not an optional extra
+      screen — without it the sign-in never completes.
+
+      The field carries only the code. The MFA token it is checked against stays
+      in the service worker.
+    -->
+    <form id="mfa-form" class="auth-form hidden">
+      <div class="settings-group">
+        <label for="mfa-code" class="settings-label">Verification code</label>
+        <input type="text" id="mfa-code" class="settings-input" inputmode="numeric"
+               autocomplete="one-time-code" placeholder="123456" required />
+        <span id="mfa-hint" class="auth-subtitle" style="margin: 0"></span>
+      </div>
+      <div id="mfa-error" class="auth-error"></div>
+      <button type="submit" id="btn-verify-mfa" class="btn btn-save-settings">Verify</button>
+      <button type="button" id="btn-mfa-cancel" class="auth-signout" style="margin: 0">Start over</button>
+    </form>
+  </div>
+
+  <!-- Everything below is the recorder proper, hidden until authenticated. -->
+  <div id="app-body">
+
+  <!-- Signed-in identity -->
+  <div class="auth-bar">
+    <span class="auth-user" id="auth-user">—</span>
+    <button id="btn-sign-out" class="auth-signout">Sign out</button>
+  </div>
+
+  <!-- Status bar -->
+    <div class="status-bar">
+    <div id="status-pill" class="status-pill idle">
+      <span class="dot"></span>
+      <span id="status-text">Idle</span>
+    </div>
+    <span id="patch-badge" class="env-badge" title="Recording application">Generic</span>
+    <span class="event-count" id="event-count">Events: <span>0</span></span>
+  </div>
+
+  <!-- Active tab URL -->
+  <div class="tab-url">
+    <strong>Tab: </strong><span id="tab-url-text">—</span>
+  </div>
+
+  <!--
+    Two selectors that used to be one. The patch decides HOW the page is
+    recorded; the environment decides WHERE the recording is filed on the
+    platform. Calling the patch "Environment" was harmless while nothing was
+    filed anywhere, and became actively confusing the moment a real environment
+    existed.
+  -->
+  <div class="env-row">
+    <label class="env-label" for="patch-select">Application</label>
+    <select id="patch-select" class="env-select">
+      <option value="oracle">Oracle Fusion</option>
+      <option value="ibm">IBM</option>
+      <option value="generic" selected>Generic</option>
+    </select>
+  </div>
+
+  <!--
+    Required, not optional: the platform rejects a recording with no
+    environmentId, and the service worker refuses to start one.
+  -->
+  <div class="env-row">
+    <label class="env-label" for="env-select">Environment</label>
+    <select id="env-select" class="env-select">
+      <option value="">Loading…</option>
+    </select>
+  </div>
+  <div id="env-warning" class="tab-url hidden" style="color: var(--warn)">
+    Choose an environment — recording cannot start without one.
+  </div>
+
+  <!-- Control buttons -->
+  <div class="btn-row">
+    <button id="btn-start" class="btn btn-start">
+      <svg class="icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="6" stroke="white" stroke-width="1.5"/>
+        <circle cx="8" cy="8" r="3" fill="white"/>
+      </svg>
+      Start Recording
+    </button>
+    <button id="btn-stop" class="btn btn-stop" disabled>
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <rect x="4" y="4" width="8" height="8" rx="1.5" fill="white"/>
+      </svg>
+      Stop Recording
+    </button>
+    <button id="btn-clear" class="btn btn-clear">
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <path d="M4 4l8 8M4 12l8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Clear
+    </button>
+    <button id="btn-copy" class="btn btn-copy" disabled>
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <rect x="5" y="5" width="8" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M3 11V3.5A1.5 1.5 0 014.5 2H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Copy Code
+    </button>
+    <button id="btn-save" class="btn btn-save" disabled>
+      <svg class="icon" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Save to App
+    </button>
+  </div>
+
+  <!-- Generated code -->
+  <div class="code-header">
+    <span class="code-label">Generated Playwright Script</span>
+  </div>
+  <div class="code-wrap">
+    <textarea id="code-output" readonly
+      placeholder="// Click 'Start Recording', interact with the page, then click 'Stop Recording'.&#10;// Your Playwright script will appear here."></textarea>
+  </div>
+
+  </div><!-- /#app-body -->
+
+  <div class="footer">FlowTrace Recorder v1.0 &nbsp;·&nbsp; Oracle/ADF ready</div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
