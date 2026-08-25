@@ -1,7 +1,14 @@
 /**
  * e2e-record-replay.test.js — End-to-end integration test:
- * Records DOM actions on a live fixture page, compiles them to structured actions,
- * and replays them through the Replayer engine to verify 100% faithful playback.
+ * Records DOM actions using the REAL built content.js (not a synthetic shim),
+ * compiles them to structured actions, and replays them through the Replayer
+ * engine to verify 100% faithful playback.
+ *
+ * TRACE-007: Previously this test injected a hand-written 3-listener shim via
+ * page.evaluate(), making capture.js, shadow DOM logic, credential detection,
+ * and oracle patches completely invisible to the test. This version loads the
+ * real dist/content.js via addScriptTag so any regression in capture.js will
+ * cause this test to fail.
  */
 import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
@@ -67,7 +74,7 @@ function runReplayer(actionsPath, resultsPath) {
 }
 
 describe('End-to-End Recording and Replay Verification', () => {
-  it('records user interactions on fields.html and successfully replays them through the engine', async () => {
+  it('records user interactions via the real content.js and successfully replays them', async () => {
     if (!existsSync(WORK)) mkdirSync(WORK, { recursive: true });
 
     const { server, port } = await startFixtureServer();
@@ -77,85 +84,97 @@ describe('End-to-End Recording and Replay Verification', () => {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    // Navigate to form fixture
-    await page.goto(fixtureUrl);
-
-    // Initialize recording event capture in the page
+    // ── Step 1: Expose the event collector BEFORE navigating ──────────────────
+    // Events emitted by the real content.js will arrive via chrome.runtime.sendMessage.
+    // We intercept them here and accumulate into recordedEvents.
     const recordedEvents = [];
     await page.exposeFunction('__recordEvent', (ev) => {
       recordedEvents.push(ev);
     });
 
-    // Inject the bundled Playwright selector engine into the page
-    const selectorEngineSrc = readFileSync(join(recorderRoot, 'dist/selector-engine.js'), 'utf8');
-    await page.evaluate((src) => {
-      window.eval(src);
-    }, selectorEngineSrc);
-
-    // Set up lightweight DOM capture listeners using the injected engine
-    await page.evaluate(() => {
-      const engine = window.__flowtracePwInjected;
-
-      function emit(type, el, extra = {}) {
-        let selector = '';
-        if (engine && el) {
-          try {
-            selector = engine.generateSelectorSimple(el);
-          } catch (_) {}
-        }
-        window.__recordEvent({
-          type,
-          url: window.location.href,
-          selector: selector || (el.id ? '#' + el.id : el.tagName.toLowerCase()),
-          label: el.getAttribute('aria-label') || el.name || el.id || '',
-          value: el.value !== undefined ? el.value : '',
-          tagName: el.tagName.toLowerCase(),
-          meta: {
-            id: el.id || '',
-            name: el.name || '',
-            ariaLabel: el.getAttribute('aria-label') || '',
+    // ── Step 2: Inject chrome API stub BEFORE content.js loads ────────────────
+    // content.js calls chrome.runtime.sendMessage / chrome.runtime.onMessage.
+    // In a plain Playwright page context there is no chrome object. We inject a
+    // minimal stub that:
+    //   - Routes RECORD_EVENT messages → window.__recordEvent (our collector)
+    //   - Provides onMessage.addListener so the content script can register
+    //   - Provides runtime.id so the guard in bus.js does not short-circuit
+    await page.addInitScript(() => {
+      const messageListeners = [];
+      window.chrome = {
+        runtime: {
+          id: 'flowtrace-e2e-stub',
+          lastError: undefined,
+          sendMessage(msg, cb) {
+            // Route recorder events to the Node-side collector
+            if (msg && msg.action === 'RECORD_EVENT' && msg.event) {
+              if (typeof window.__recordEvent === 'function') {
+                window.__recordEvent(msg.event);
+              }
+            }
+            // Acknowledge all other messages (GET_STATUS, PATCH_CONTEXT_UPDATE, etc.)
+            if (typeof cb === 'function') {
+              setTimeout(() => { cb(null); }, 0);
+            }
           },
-          ...extra,
-        });
-      }
-
-      // Record initial navigation
-      emit('navigate', document.body, { url: window.location.href });
-
-      document.addEventListener('input', (e) => {
-        if (e.target.tagName !== 'SELECT') {
-          emit('fill', e.target, { value: e.target.value });
-        }
-      }, true);
-
-      document.addEventListener('change', (e) => {
-        if (e.target.tagName === 'SELECT') {
-          emit('select', e.target, { value: e.target.value });
-        }
-      }, true);
-
-      document.addEventListener('click', (e) => {
-        emit('click', e.target);
-      }, true);
+          onMessage: {
+            addListener(fn) {
+              messageListeners.push(fn);
+            },
+          },
+        },
+      };
+      // Expose a helper so we can trigger __flowtrace_activate__ after navigation
+      window.__flowtraceMessageListeners = messageListeners;
     });
 
-    // Perform real user interactions on the fixture
+    // ── Step 3: Navigate to fixture ───────────────────────────────────────────
+    await page.goto(fixtureUrl);
+
+    // ── Step 4: Load the real bundled content script ───────────────────────────
+    // This is the critical difference from the old shim approach: we load the
+    // actual dist/content.js so capture.js, dom.js, shadow DOM logic, credential
+    // detection, and oracle patches are all exercised.
+    await page.addScriptTag({ path: join(recorderRoot, 'dist/content.js') });
+
+    // ── Step 5: Activate recording via the real content script mechanism ───────
+    // index.js listens for __flowtrace_activate__ window events to start capture.
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('__flowtrace_activate__', {
+        detail: { patchId: 'generic' },
+      }));
+    });
+
+    // Brief pause for activation to settle
+    await page.waitForTimeout(100);
+
+    // ── Step 6: Perform real user interactions ─────────────────────────────────
     await page.locator('#bu').fill('Acme Global');
     await page.locator('#dt').fill('15-Jan-2026');
     await page.locator('#rel').selectOption('1');
 
-    // Wait a brief moment for events to flush
-    await page.waitForTimeout(300);
+    // Wait for fill debounce (600ms) to flush, plus a buffer
+    await page.waitForTimeout(800);
+
     await browser.close();
 
-    // Verify recorded events
-    expect(recordedEvents.length).toBeGreaterThanOrEqual(3);
+    // ── Step 7: Verify real capture.js emitted events ─────────────────────────
+    // The real capture.js has a 600ms fill debounce, so we expect at least the
+    // 3 interactions (fill, fill, select) plus the navigate event.
+    expect(recordedEvents.length, 'Real capture.js should have emitted events').toBeGreaterThanOrEqual(3);
 
-    // Compile recorded events into FlowTrace structured action envelope
+    // Verify event structure matches the real RecordedEvent schema (has selector,
+    // label, locator — not just the shim's minimal fields)
+    const fillEvents = recordedEvents.filter(e => e.type === 'fill');
+    expect(fillEvents.length, 'Should have fill events from real onInput handler').toBeGreaterThanOrEqual(1);
+    expect(fillEvents[0]).toHaveProperty('selector');
+    expect(fillEvents[0]).toHaveProperty('label');
+    expect(fillEvents[0]).toHaveProperty('locator');
+
+    // ── Step 8: Compile and replay ────────────────────────────────────────────
     const actions = compileActions(recordedEvents);
     expect(actions.length).toBeGreaterThanOrEqual(3);
 
-    // Write actions and results paths for Replayer
     const actionsPath = join(WORK, 'e2e-actions.json');
     const resultsPath = join(WORK, 'e2e-results.json');
     if (existsSync(resultsPath)) rmSync(resultsPath);
@@ -164,7 +183,6 @@ describe('End-to-End Recording and Replay Verification', () => {
 
     let code, out;
     try {
-      // Run the Replayer child process while server is still listening
       const res = await runReplayer(actionsPath, resultsPath);
       code = res.code;
       out = res.out;
@@ -190,5 +208,5 @@ describe('End-to-End Recording and Replay Verification', () => {
 
     // Cleanup
     if (existsSync(WORK)) rmSync(WORK, { recursive: true, force: true });
-  }, 35_000);
+  }, 45_000);
 });
