@@ -48,14 +48,17 @@ export const FIELD_CONTAINER =
   '[class*="fieldContainer"], [class*="inputContainer"], ' +
   '[class*="af_panelFormLayout"], [class*="panelFormLayout"], tr';
 
-/** ADF field wrappers, used for label lookup and required-field detection. */
+/** ADF field wrappers, used for label lookup. */
 export const FIELD_WRAPPER = '[class*="af_input"], [class*="AF"]';
 
-/** Markers ADF puts on a required field. */
-export const REQUIRED_MARKER =
-  '[class*="required"]:not([class*="Absence"]), ' +
-  '[class*="Required"]:not([class*="Absence"]), ' +
-  '.AFRequiredIcon:not(.AFRequiredIconAbsence)';
+/**
+ * Required-field markers used to be a selector here. They are now a vocabulary
+ * in core/content/required.js, because the answer is not "does a marker element
+ * exist" but "does one RENDER" — ADF puts `p_rqi` and `AFRequiredIconAbsence`
+ * on OPTIONAL fields too, so presence alone marks the whole form. The
+ * `:not([class*="Absence"])` knowledge this selector carried survives as the
+ * `absen[ct]` term in that file's CLASS_ANTI.
+ */
 
 /** Buttons that commit a dialog. `.x1k8`/`.x1ka` are ADF's generated classes. */
 export const COMMIT_BUTTON = 'button, a[role="button"], span[role="button"], a, span, .x1k8';

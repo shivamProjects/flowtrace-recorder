@@ -14,11 +14,12 @@
  */
 
 import { cleanText, normaliseFieldName } from '../../core/content/dom.js';
+import { detectRequired } from '../../core/content/required.js';
 import { resolveAdfLabel } from './labels.js';
 import {
   CHOICE_OPTION, COMMIT_BUTTON, COMMIT_TEXT, DATE_HEADERS, DATE_PICKER, DIALOG,
-  FIELD_CONTAINER, FIELD_WRAPPER, JET_SELECT_HOST, LOV_POPUP, LOV_TRIGGER, NAV_TILE,
-  NAV_TILE_CHILD, REQUIRED_MARKER,
+  FIELD_CONTAINER, JET_SELECT_HOST, LOV_POPUP, LOV_TRIGGER, NAV_TILE,
+  NAV_TILE_CHILD,
 } from './selectors.js';
 
 const TRIGGER_MEMORY_MS = 8_000;
@@ -650,39 +651,46 @@ function captureNavTile(target, ctx) {
 
 // ── required fields ─────────────────────────────────────────────────────────
 
-/** ADF marks required fields five different ways depending on the component. */
+/**
+ * Ask the shared detector about every control on the page, keyed by the label
+ * ADF associates with it.
+ *
+ * The detection itself is NOT Oracle-specific and no longer lives here — see
+ * core/content/required.js. What remains Oracle's business is the key: only
+ * `resolveAdfLabel` knows about the `::content` id suffix and the label cell
+ * ADF emits with no `for` attribute.
+ *
+ * The map is TRI-STATE. `true` and `false` are answers; `null` means the page
+ * gave no grounds either way, which is not the same as "optional" and must not
+ * be written as `false`. A key absent from the map was never resolvable to a
+ * label at all.
+ *
+ * A verdict is never downgraded. ADF re-renders its markers on every partial
+ * refresh and a field can be mid-rewrite when the poll lands, so a marker seen
+ * once is kept: only an unknown (absent or null) entry is overwritten, and only
+ * `true` may overwrite a `false`.
+ */
 function scanRequiredFields(ctx) {
   try {
-    const mark = (name) => {
-      const key = normaliseFieldName(name);
-      if (key) state.requiredFields[key] = true;
-    };
+    const updates = {};
 
-    for (const label of document.querySelectorAll('label[class*="required"], label[class*="Required"]')) {
-      mark(label.textContent);
-    }
-    for (const label of document.querySelectorAll('label')) {
-      if (/^\*{1,2}\s/.test(label.textContent.trim())) mark(label.textContent);
-    }
-    for (const star of document.querySelectorAll('span, div')) {
-      if (!/^\*{1,2}$/.test(star.textContent.trim())) continue;
-      const parent = star.parentElement;
-      if (!parent) continue;
-      const label = parent.querySelector('label') ||
-        (parent.nextElementSibling?.matches?.('label') ? parent.nextElementSibling : null);
-      if (label && !label.contains(star)) mark(label.textContent);
-    }
-    for (const el of document.querySelectorAll('[aria-required="true"], [required]')) {
-      mark(resolveAdfLabel(el));
-    }
     for (const el of document.querySelectorAll('input, textarea, select')) {
+      if (el.type === 'hidden') continue;
       const name = normaliseFieldName(resolveAdfLabel(el));
-      if (!name || state.requiredFields[name]) continue;
-      const wrapper = el.closest(`td, tr, ${FIELD_WRAPPER}`);
-      if (wrapper?.querySelector(REQUIRED_MARKER)) state.requiredFields[name] = true;
+      if (!name) continue;
+
+      const seen = state.requiredFields[name];
+      if (seen === true) continue;
+
+      const verdict = detectRequired(el).required;
+      if (verdict === null && seen !== undefined) continue;
+      if (verdict === false && seen === false) continue;
+
+      state.requiredFields[name] = verdict;
+      updates[name] = verdict;
     }
 
-    ctx.updateContext({ requiredFieldMap: { ...state.requiredFields } });
+    if (Object.keys(updates).length) ctx.updateContext({ requiredFieldMap: updates });
   } catch {
     // A malformed selector against an unexpected DOM must not stop recording.
   }
