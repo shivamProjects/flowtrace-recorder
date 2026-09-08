@@ -172,8 +172,9 @@ describe('End-to-End Recording and Replay Verification', () => {
     expect(fillEvents[0]).toHaveProperty('locator');
 
     // ── Step 8: Compile and replay ────────────────────────────────────────────
-    const actions = compileActions(recordedEvents);
-    expect(actions.length).toBeGreaterThanOrEqual(3);
+    const allEvents = [{ type: 'navigate', url: fixtureUrl }, ...recordedEvents];
+    const actions = compileActions(allEvents);
+    expect(actions.length).toBeGreaterThanOrEqual(4);
 
     const actionsPath = join(WORK, 'e2e-actions.json');
     const resultsPath = join(WORK, 'e2e-results.json');

@@ -21,13 +21,9 @@ import { SESSION_URL_PARAMS } from './selectors.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Locator objects ──────────────────────────────────────────────────────────
 //
-// Every rewrite below used to state its decision ONLY as a Playwright
-// expression string. The replayer never evaluates that string — it reads the
-// structured locator and builds its own candidates from the fields — so a
-// postProcess decision expressed as `page.getByRole('cell', { name: … })`
-// reached it as nothing at all, and the step replayed against the pre-rewrite
-// element. Each rewrite therefore now states itself in BOTH forms: the object
-// for the replayer, the expression for the generated script a human reads.
+// Each rewrite below provides both representations: the structured locator
+// object for replayer candidate ladder evaluation, and the expression string
+// for readable generated scripts.
 //
 // `patchLocator` merges rather than replaces, because the fields the content
 // script captured against the live element — id, componentId, attrSelector,

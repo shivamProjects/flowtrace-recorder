@@ -34,8 +34,7 @@ export function shouldAccept(event, history) {
   }
 
   if (event.type === 'fill' && last.type === 'fill') {
-    // A later value for the same field replaces the earlier one rather than
-    // appending — the script should type the final value once.
+    // Consecutive fills on the same selector within FILL_SUPERSEDE_MS collapse to the latest value.
     if (event.selector === last.selector &&
         Math.abs(event.timestamp - last.timestamp) < FILL_SUPERSEDE_MS) {
       history[history.length - 1] = event;

@@ -188,8 +188,7 @@ export function validate(action, index) {
 
   if (verb === 'navigate' && !action.url) problems.push(`${at}: navigate has no url`);
   if (verb === 'wait' && typeof action.durationMs !== 'number') {
-    // The old format overloaded `text` with the duration, so a wait replayed as
-    // a zero-length pause and the race it existed to absorb came back.
+    // Schema v1 mandates explicit numeric durationMs for deterministic replay delays.
     problems.push(`${at}: wait has no numeric durationMs`);
   }
 

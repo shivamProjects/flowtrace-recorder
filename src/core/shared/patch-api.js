@@ -8,9 +8,8 @@
  * A patch has two halves that run in different worlds:
  *
  *   capture      runs in the PAGE (content script), while the user is recording.
- *                It sees live DOM and can read state that no longer exists by
- *                the time the recording stops — an open LOV popup, a calendar
- *                header, a value ADF writes 800ms after a dialog closes.
+ *                It inspects live DOM to capture transient interaction state —
+ *                an open LOV popup, a calendar header, or post-dialog values.
  *
  *   postProcess  runs in the SERVICE WORKER when recording stops. It sees the
  *                whole event list at once and can merge, drop, reorder, or
@@ -88,12 +87,9 @@
  *
  * @property {(el: Element) => string} [label]
  *   Resolve a control's label using this application's conventions. When a
- *   patch supplies this it REPLACES the core resolver outright rather than
- *   layering over it — a half-and-half chain would make the result depend on
- *   which half ran first, which is exactly the kind of thing that is
- *   impossible to reason about six months later. A patch that wants the core
- *   behaviour as a fallback imports `resolveLabel` from core/content/dom.js
- *   and calls it explicitly.
+ *   patch supplies this, it executes in place of the core resolver. A patch
+ *   that uses core label resolution as a fallback imports `resolveLabel` from
+ *   core/content/dom.js and calls it explicitly.
  *
  *   Oracle needs this because ADF associates labels through
  *   `label[for="…::content"]` and through table-cell adjacency, neither of
@@ -121,13 +117,12 @@
  */
 
 /**
- * The patch used when none is selected, or when a stored id no longer exists.
- * Defined in core rather than in the registry so that core modules never need
- * to import from patches/ — the dependency arrow points one way only.
+ * The default patch identifier when none is selected or when a stored id is unresolvable.
+ * Defined in core so that the dependency arrow points strictly from patches to core.
  */
 export const DEFAULT_PATCH_ID = 'generic';
 
-/** A patch that does nothing, used to avoid null checks in the core. */
+/** No-op capture implementation ensuring safe non-null invocation across core handlers. */
 export const NULL_CAPTURE = {
   start() {},
   onClick() { return false; },

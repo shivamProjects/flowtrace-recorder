@@ -1,0 +1,29 @@
+{
+  "fixture": "checkbox.html",
+  "source": "Oracle Fusion — Create Supplier › Address › Address Purpose (ibqwjb-test, 2026-08-25)",
+  "widget": "ADF selectManyCheckbox",
+  "cases": [
+    {
+      "name": "a checkbox clicked directly records as a check",
+      "click": "document.getElementById('pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_0')",
+      "expect": { "type": "check", "label": "Ordering" }
+    },
+    {
+      "name": "a checkbox clicked on its wrapping cell still records as a check",
+      "click": "[...document.querySelectorAll('td')].find(td => td.querySelectorAll('input[type=checkbox]').length === 1)",
+      "expect": { "type": "check", "label": "Email Invoices" },
+      "because": "retargetToInteractive walks OUTWARD, so a click on the padding resolved to the <td> and replay toggled nothing"
+    },
+    {
+      "name": "a cell holding several checkboxes is NOT guessed at",
+      "click": "document.querySelectorAll('td')[1]",
+      "expect": { "type": "click" },
+      "because": "Address Purpose puts Ordering / Remit to / RFQ or Bidding in one cell; picking one would silently tick the wrong box"
+    },
+    {
+      "name": "a cell with no checkbox is left alone",
+      "click": "[...document.querySelectorAll('td')].find(td => td.querySelector('input[type=text]'))",
+      "expect": { "type": "click" }
+    }
+  ]
+}

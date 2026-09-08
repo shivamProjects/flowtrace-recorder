@@ -1,0 +1,13 @@
+{
+  "fixture": "redwood-table-picker.html",
+  "source": "Oracle Fusion — Create Sales Order › Business Unit picker (ibqwjb-test, 2026-08-26)",
+  "widget": "Redwood oj-table",
+  "cases": [
+    {
+      "name": "an oj-table picker row is recorded",
+      "click": "document.querySelector('td')",
+      "expect": { "type": "click" },
+      "because": "the real widget is a bare <td> with no ARIA role, so role-only selector lists missed it entirely"
+    }
+  ]
+}

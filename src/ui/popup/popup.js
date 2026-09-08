@@ -290,9 +290,7 @@
     const resp = await sendBg({ action: 'GET_ENVIRONMENTS' });
 
     if (!resp || !resp.success) {
-      // The list could not be fetched. A previously chosen environment is still
-      // usable — the id is all the upload needs — so an outage on this call
-      // must not take the recorder down with it.
+      // Offline fallback: retain any already selected environment for upload continuity.
       envSelect.innerHTML = '';
       envSelect.appendChild(option('', current ? `${current.name} (offline)` : 'Unavailable'));
       if (current) envSelect.appendChild(option(current.id, current.name));
@@ -310,9 +308,7 @@
       envSelect.appendChild(option(env.id, label));
     }
 
-    // A stored environment that the server no longer lists has been deleted or
-    // moved out of reach; forget it rather than leaving a dead id selected that
-    // would only fail at upload.
+    // Synchronize selection against active server environments, clearing stale selections.
     const stillListed = current && resp.environments.some((e) => e.id === current.id);
     envSelect.value = stillListed ? current.id : '';
     if (current && !stillListed) await sendBg({ action: 'SET_ENVIRONMENT', environment: null });

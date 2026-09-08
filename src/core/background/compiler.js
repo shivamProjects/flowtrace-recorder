@@ -209,9 +209,7 @@ function toAction(event, previousUrl) {
   }
 
   if (type === 'wait') {
-    // The duration is its own numeric field. It used to ride in `text`, where
-    // the replayer read it as a string, got NaN and paused for nothing — the
-    // race the wait existed to absorb came straight back.
+    // Explicit numeric durationMs ensures deterministic pauses across replay runs.
     return element('wait', event, { durationMs: waitDuration(event) });
   }
 

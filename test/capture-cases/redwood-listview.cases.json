@@ -1,0 +1,12 @@
+{
+  "fixture": "redwood-picker.html",
+  "source": "Oracle Fusion — Redwood LOV list, captured with the dropdown OPEN (ibqwjb-test, 2026-08-25)",
+  "widget": "Redwood oj-listview",
+  "cases": [
+    {
+      "name": "a Redwood listview row is recorded",
+      "click": "document.querySelector('[role=gridcell]') || document.querySelector('li')",
+      "expect": { "type": "click" }
+    }
+  ]
+}

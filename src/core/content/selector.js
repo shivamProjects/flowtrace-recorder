@@ -25,8 +25,8 @@
  * `label[for="pt1:r1:0:it10"]` pointing at an id that is not the input's
  * (`…::content`), concludes there is no accessible name, and emits a bare
  * `getByRole('textbox')` — unique in a fixture, not on a real page. So a
- * patch-resolved label wins when it verifies. The engine replaces the ladder,
- * not the ADF label knowledge.
+ * patch-resolved label wins when it verifies. The engine operates alongside
+ * ADF label resolution knowledge.
  *
  * Everything outside this file talks to `generateSelector(el)` and nothing else.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -90,24 +90,13 @@ function engineFor(el) {
 /**
  * Playwright's answer.
  *
- * Returns null when the engine is absent or throws, which is the whole reason
- * the ladder is still here. A recorder that produces nothing is worse than one
- * that produces the old answer.
+ * Returns null when the engine is absent or throws, allowing the heuristic
+ * ladder to provide fallback locator resolution.
  *
- * There is deliberately NO "prefer the patch's ADF label over the engine"
- * branch, though it looks like there should be. It would never fire: a label
- * that `getByLabel` can resolve is a label the engine has already taken as the
- * accessible name, because both read the same association. And where ADF breaks
- * that association — `label[for="pt1:r1:0:it10"]` against an input whose id is
- * `pt1:r1:0:it10::content` — `getByLabel` matches NOTHING, so preferring it
- * would ship a locator that cannot resolve. The old ladder emitted exactly that
- * and it could never have worked.
- *
- * The ADF label is not lost. `buildLocatorObject` resolves it independently into
- * `locator.label` and `locator.name`, and the replayer's candidate ladder tries
- * those alongside `locator.id`. A v1 locator carries several ways to find one
- * element, so `selector` being one candidate rather than the only one is what
- * makes it safe for the engine to answer honestly here.
+ * `buildLocatorObject` resolves ADF labels independently into `locator.label`
+ * and `locator.name`, while the engine provides standard accessible names and
+ * attributes. The replayer's candidate ladder evaluates these alongside
+ * `locator.id`, providing multiple resolution paths for the target element.
  */
 function engineSelector(el, raw, labelResolver) {
   const engine = engineFor(el);

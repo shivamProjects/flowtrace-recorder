@@ -13,7 +13,7 @@
 import { safeInvoke } from '../shared/patch-api.js';
 import { isSensitiveField, maskedFields, maskEvent } from '../shared/sensitive.js';
 import { makeNavigateEvent } from '../shared/types.js';
-import { cleanLabel, cleanText, resolveLabel, retargetToInteractive, roleOf } from './dom.js';
+import { cleanLabel, cleanText, isVisible, resolveLabel, retargetToInteractive, roleOf } from './dom.js';
 import { buildLocatorObject } from './locator-object.js';
 import { generateSelector } from './selector.js';
 import { frameInfo } from './frames.js';
@@ -178,6 +178,26 @@ function onClick(e) {
   if (isCheckboxLike(target)) {
     emitCheckbox(target, e);
     return;
+  }
+
+  // A click that lands on the padding around a checkbox — the <td> or <span>
+  // ADF wraps it in — is not the checkbox, and retargetToInteractive() walks
+  // OUTWARD so it never finds one either. The step was recorded as a generic
+  // click on the cell, which replays as "click that box of pixels" and toggles
+  // nothing. Measured on the captured Create Supplier markup
+  // (checks/pages/checkbox.html): clicking the wrapping <td> emitted
+  // click/TD instead of check/INPUT.
+  //
+  // Exactly ONE checkbox inside means the click was unambiguously meant for it.
+  // A group like Address Purpose (Ordering / Remit to / RFQ or Bidding) sits
+  // three-to-a-cell and nothing here says which was intended, so those keep
+  // falling through to the generic click rather than being guessed at.
+  if (target.querySelectorAll) {
+    const boxes = target.querySelectorAll('input[type="checkbox"], input[type="radio"]');
+    if (boxes.length === 1 && isVisible(boxes[0])) {
+      emitCheckbox(boxes[0], e);
+      return;
+    }
   }
 
   // <select> is handled on 'change', where the chosen option is known.

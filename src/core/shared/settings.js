@@ -21,8 +21,8 @@
 const API_BASE_KEY = 'apiBase';
 const ENVIRONMENT_KEY = 'environment';
 
-/** Local development default — the platform's Spring server listens on 8080. */
-export const DEFAULT_API_BASE = 'http://localhost:8080';
+/** Local development default — the platform's Spring server listens on 3050. */
+export const DEFAULT_API_BASE = 'http://localhost:3050';
 
 export async function getApiBase() {
   try {

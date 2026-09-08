@@ -1,13 +1,8 @@
 /**
- * selectors.js — every ADF/Fusion-specific CSS selector in one place.
+ * selectors.js — centralized ADF/Fusion-specific CSS selectors.
  *
- * These strings were previously inline at a dozen call sites in content.js,
- * which meant that adding a dialog wrapper for one Fusion module involved
- * finding and editing several near-identical selector lists. They are grouped
- * by what they identify, not by which function happens to use them.
- *
- * When a new Fusion module turns out to use a wrapper we do not recognise, this
- * is the only file that needs to change.
+ * Selectors are grouped by structural role (dialogs, popups, inputs, tables),
+ * providing a single point of definition across the Oracle patch.
  */
 
 /** Containers ADF uses for modal and inline dialogs. */
