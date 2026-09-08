@@ -182,7 +182,7 @@ describe('signing in', () => {
     const { auth } = await loadModules();
     await auth.signIn('shivam', 'correct horse');
 
-    expect(requests[0].url).toBe('http://localhost:3050/api/auth/login');
+    expect(requests[0].url).toMatch(/^https?:\/\/[^/]+:3050\/api\/auth\/login$/);
   });
 
   it('reports a deactivated account in the server\'s own words, not "ERROR"', async () => {

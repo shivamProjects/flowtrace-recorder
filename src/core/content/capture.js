@@ -18,6 +18,7 @@ import { buildLocatorObject } from './locator-object.js';
 import { generateSelector } from './selector.js';
 import { frameInfo } from './frames.js';
 import { isWidgetNode } from './widget.js';
+import { detectRequired } from './required.js';
 import * as bus from './bus.js';
 
 const FILL_DEBOUNCE_MS = 600;
@@ -85,6 +86,13 @@ export function makeEvent(type, el, extra = {}) {
   const meta = { ...patchMeta, ...selector.raw };
   if (el && isSensitiveField(el)) meta.sensitive = true;
 
+  const reqVerdict = el ? detectRequired(el) : null;
+  if (reqVerdict && reqVerdict.required !== null) {
+    meta.required = reqVerdict.required;
+    meta.requiredSource = reqVerdict.source;
+    meta.requiredScope = reqVerdict.scope;
+  }
+
   // The structured locator, built ONCE here while the element is still in the
   // page. Every field of it is a fallback the replayer can try when the primary
   // selector has drifted; none of them can be recovered from the event list
@@ -110,6 +118,13 @@ export function makeEvent(type, el, extra = {}) {
     text: el ? cleanText(el.textContent) : null,
     label,
     role: el ? roleOf(el) : null,
+    ...(reqVerdict && reqVerdict.required !== null
+      ? {
+        required: reqVerdict.required,
+        requiredSource: reqVerdict.source,
+        requiredScope: reqVerdict.scope,
+      }
+      : {}),
     meta,
     ...extra,
   };

@@ -54,6 +54,7 @@ export const ACTION_FIELDS = Object.freeze([
   'action', 'locator', 'url', 'value', 'committedValue', 'sensitive',
   'credentialRef', 'durationMs', 'key', 'checked', 'optionIndex', 'outputName',
   'files', 'snapshot', 'deltaX', 'deltaY', 'description', 'skipInReport', 'frame',
+  'required', 'requiredSource', 'requiredScope',
 ]);
 
 const ACTION_KEYS = new Set(ACTION_FIELDS);

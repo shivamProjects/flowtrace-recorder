@@ -1,4 +1,5 @@
 {
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyKyLjGE6+xrS+hwkZUOlk9bNU6JbLmNL39DQpqAX56Z9+yQP7aw1/nj+u43X16/8mmRF+Y3yUVauUYPJYgahrHDlXJlXToIr4keNpaBoImAnZ3QyxRFuT6f60XRew99MkEXuscY0KUYQT7WzbdNqb7YXbQFnUFNw8fJQ+b3xOea2OUJNl9WpM+ZFmVJX5OKHsj/XqFZBlGsW82PpHfMSip4o4zgiQ2AcVETDos5owDmhgvbqcisb7xAIET0XA+EySoEbU8MxtOcWfefovH6oxXEkvf5tOSihwyNkr88eRqOD2kXVQh+cbgo64V37B7oKu8eOqHw+Ea9ipWM7ruVpcQIDAQAB",
   "manifest_version": 3,
   "name": "FlowTrace Recorder",
   "version": "1.0.0",

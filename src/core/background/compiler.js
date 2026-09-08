@@ -88,7 +88,11 @@ export function compileSteps(events) {
         }
         : {}),
       ...(event.required !== undefined
-        ? { required: event.required, requiredSource: event.requiredSource }
+        ? {
+          required: event.required,
+          requiredSource: event.requiredSource,
+          ...(event.requiredScope ? { requiredScope: event.requiredScope } : {}),
+        }
         : {}),
       ...(event.committedValue != null ? { committedValue: event.committedValue } : {}),
       ...(event.originalValue !== undefined ? { originalValue: event.originalValue } : {}),
@@ -260,6 +264,15 @@ function element(action, event, extra = {}) {
 
   const description = event.description ?? meta.description;
   if (description) out.description = description;
+
+  const req = event.required ?? meta.required;
+  if (req !== undefined && req !== null) {
+    out.required = req;
+    const reqSource = event.requiredSource ?? meta.requiredSource;
+    if (reqSource) out.requiredSource = reqSource;
+    const reqScope = event.requiredScope ?? meta.requiredScope;
+    if (reqScope) out.requiredScope = reqScope;
+  }
 
   for (const [key, value] of Object.entries(extra)) {
     if (value === undefined || value === null) continue;
