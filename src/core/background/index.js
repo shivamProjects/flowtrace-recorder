@@ -24,3 +24,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   return true; // response is asynchronous
 });
+
+if (chrome.runtime.onMessageExternal) {
+  chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
+    route(msg, sender)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error('[recorder] external handler failed:', msg.action, err);
+        sendResponse({ error: err.message });
+      });
+    return true;
+  });
+}
+

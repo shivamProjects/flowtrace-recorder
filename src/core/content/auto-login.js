@@ -42,11 +42,11 @@ export function findLoginField(type = 'username', extraCandidates = []) {
   }
 
   const names = isPass
-    ? ['password', 'os_password', 'passwd', 'pwd', 'signin-form-password', ...extraCandidates]
-    : ['username', 'userid', 'user_id', 'email', 'os_username', 'userName', 'signin-form-username', ...extraCandidates];
+    ? ['password', 'os_password', 'passwd', 'pwd', 'signin-form-password', 'idcs-signin-basic-signin-form-password', 'Pass', ...extraCandidates]
+    : ['username', 'userid', 'user_id', 'email', 'os_username', 'userName', 'signin-form-username', 'idcs-signin-basic-signin-form-username', 'User', ...extraCandidates];
 
   for (const name of names) {
-    const el = document.querySelector(`input[name="${name}" i], input[id*="${name}" i], input[autocomplete="${name}" i]`);
+    const el = document.querySelector(`input[name="${name}" i], input[id="${name}" i], input[id*="${name}" i], input[autocomplete="${name}" i]`);
     if (el) return el;
   }
 
@@ -57,7 +57,7 @@ export function findLoginField(type = 'username', extraCandidates = []) {
 
 /** Find the sign-in / submit button on enterprise login portals. */
 export function findSignInButton() {
-  const btn = document.querySelector('button[type="submit"], input[type="submit"], button[id*="signin" i], button[id*="submit" i], [role="button"][id*="submit" i]');
+  const btn = document.querySelector('#btnActive, #idcs-signin-basic-signin-form-submit, button[type="submit"], input[type="submit"], button[id*="signin" i], button[id*="submit" i], [role="button"][id*="submit" i]');
   if (btn) return btn;
 
   for (const b of document.querySelectorAll('button, [role="button"], input[type="button"]')) {

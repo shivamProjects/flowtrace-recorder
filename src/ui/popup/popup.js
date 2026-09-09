@@ -459,16 +459,35 @@
     }
   }
 
+  // ── Tab switching ────────────────────────────────────────────────────────
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-tab');
+      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      tabContents.forEach(c => c.classList.toggle('active', c.id === targetId));
+    });
+  });
+
+  const btnCloseSettings = document.getElementById('btn-close-settings');
+  if (btnCloseSettings) {
+    btnCloseSettings.addEventListener('click', () => {
+      settingsPanel.classList.add('hidden');
+    });
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Live Step Timeline Rendering & Deletion
   // ─────────────────────────────────────────────────────────────────────────
   function renderTimeline(events) {
     if (!stepList) return;
-    timelineCount.textContent = events.length;
+    if (timelineCount) timelineCount.textContent = (events && events.length) || 0;
 
     if (!events || events.length === 0) {
       stepList.innerHTML = `
-        <div style="padding: 10px; text-align: center; color: var(--text-3); font-style: italic; font-size: 11px;">
+        <div style="padding: 16px; text-align: center; color: var(--text-3); font-style: italic; font-size: 11px;">
           No steps recorded yet. Click Start to begin.
         </div>
       `;
@@ -476,15 +495,22 @@
     }
 
     stepList.innerHTML = events.map((evt, idx) => {
-      const type = (evt.type || 'action').toLowerCase();
-      const verbClass = `verb-${type}`;
+      const rawType = (evt.type || 'action').toLowerCase();
+      let badgeClass = 'action';
+      if (rawType.includes('click')) badgeClass = 'click';
+      else if (rawType.includes('fill') || rawType.includes('input') || rawType.includes('type')) badgeClass = 'fill';
+      else if (rawType.includes('lov')) badgeClass = 'lov';
+      else if (rawType.includes('select')) badgeClass = 'select';
+      else if (rawType.includes('nav') || rawType.includes('url')) badgeClass = 'navigate';
+      else if (rawType.includes('check')) badgeClass = 'check';
+
       const label = evt.label || evt.text || evt.selector || (evt.meta && evt.meta.url) || 'interaction';
       const valStr = evt.value ? ` "${evt.value}"` : '';
 
       return `
         <div class="step-item" data-index="${idx}">
           <span class="step-num">#${idx + 1}</span>
-          <span class="step-verb ${verbClass}">${type}</span>
+          <span class="step-badge ${badgeClass}">${rawType}</span>
           <span class="step-desc" title="${escapeHtml(label + valStr)}">${escapeHtml(label + valStr)}</span>
           <button class="step-del" data-del="${idx}" title="Delete this step">×</button>
         </div>
@@ -790,12 +816,15 @@
     const origText = btnSave.innerHTML;
     btnSave.textContent = 'Saving...';
 
+    const customNameInput = document.getElementById('sync-script-name');
+    const customDescInput = document.getElementById('sync-script-desc');
+    const scriptName = (customNameInput && customNameInput.value.trim()) || `Script_${currentSession.patchId || patchSelect.value}_${stamp}`;
+    const scriptDesc = (customDescInput && customDescInput.value.trim()) || `Recorded from the Chrome extension on ${now.toLocaleString()}`;
+
     const resp = await sendBg({
       action: 'UPLOAD_RECORDING',
-      // `patchId`, not `environment` — the field was renamed and this read had
-      // been undefined ever since, putting "Script_undefined_…" on every upload.
-      name: `Script_${currentSession.patchId || patchSelect.value}_${stamp}`,
-      description: `Recorded from the Chrome extension on ${now.toLocaleString()}`,
+      name: scriptName,
+      description: scriptDesc,
     });
 
     btnSave.innerHTML = origText;

@@ -264,11 +264,17 @@ export function validateActions(actions) {
 /**
  * The stored/uploaded envelope.
  *
+ * CANONICAL TRUTH CONTRACT:
+ * `actions` is the sole canonical source of truth for execution, parameter binding,
+ * and step replay. `steps` (if present) is explicitly a derived, lossy convenience
+ * for legacy consumers needing Playwright source strings. Each compiled step carries
+ * `actionIndex` pointing back to its origin in `actions` to prevent index misalignment.
+ *
  * `schemaVersion` is first and mandatory: a reader that cannot tell which
  * format it is holding has to guess from the contents, and every such guess in
  * this codebase's history has eventually guessed wrong.
  */
-export function makeEnvelope({ name, description, recordedAt, sourceUrl, patchId, actions }) {
+export function makeEnvelope({ name, description, recordedAt, sourceUrl, patchId, actions, steps }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     name,
@@ -277,5 +283,6 @@ export function makeEnvelope({ name, description, recordedAt, sourceUrl, patchId
     sourceUrl,
     patchId,
     actions: actions || [],
+    ...(Array.isArray(steps) && steps.length > 0 ? { steps } : {}),
   };
 }

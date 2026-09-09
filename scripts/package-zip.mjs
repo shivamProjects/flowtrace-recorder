@@ -4,13 +4,14 @@
  * Verifies that the manifest carries the pinned public key so the extension ID
  * remains ijbehkijmihjnhbmbdmoglbbajbkadbd (required by the backend CORS allowlist).
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, cpSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, execSync } from 'node:child_process';
 
-const root = dirname(fileURLToPath(import.meta.url));
-const recorderDir = resolve(root, '..');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const recorderDir = resolve(__dirname, '..');
 const distDir = resolve(recorderDir, 'dist');
 const pkg = JSON.parse(readFileSync(resolve(recorderDir, 'package.json'), 'utf8'));
 const version = pkg.version || '1.0.0';
@@ -37,10 +38,14 @@ if (!manifest.key) {
 const outDir = resolve(recorderDir, 'release');
 mkdirSync(outDir, { recursive: true });
 
+const unpackedDir = resolve(outDir, `flowtrace-recorder-extension-${version}`);
+if (existsSync(unpackedDir)) rmSync(unpackedDir, { recursive: true, force: true });
+cpSync(distDir, unpackedDir, { recursive: true });
+
 const zipName = `flowtrace-recorder-extension-${version}.zip`;
 const zipPath = resolve(outDir, zipName);
 
-if (existsSync(zipPath)) rmSync(zipPath);
+if (existsSync(zipPath)) rmSync(zipPath, { force: true });
 
 console.log(`[package] Creating release zip at ${zipPath}...`);
 

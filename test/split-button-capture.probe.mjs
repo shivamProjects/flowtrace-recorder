@@ -235,8 +235,11 @@ for (const { page, instance } of PAGES_UNDER_TEST) {
     );
   }
 
+  // The shipped launcher record carries `id`/`idSelector` and deliberately no
+  // role or label, so it is inert to every pass that keys on those. Accept
+  // either shape rather than only the one this probe first proposed.
   const caretRecorded = records.some((r) =>
-    String(r.fieldId || '').endsWith('saveMenu::popEl'));
+    String(r.fieldId || r.id || '').endsWith('saveMenu::popEl'));
   console.log(`\n  caret captured as its own record: ${caretRecorded ? 'YES' : 'NO'}`);
   if (!caretRecorded) allCaptured = false;
 }

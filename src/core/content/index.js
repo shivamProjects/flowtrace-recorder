@@ -64,7 +64,36 @@ function main() {
       activate(resp.session.patchId, resp.session.eventCount || 0);
     }
   });
+
+  // Platform Web App Direct Bridge (for platform.shivambhaipatel.com / localhost)
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || !event.data || typeof event.data !== 'object') return;
+    if (event.data.type === '__FLOWTRACE_PLATFORM_PING__') {
+      window.postMessage({
+        type: '__FLOWTRACE_PLATFORM_PONG__',
+        installed: true,
+        version: '1.0.0',
+        recording: bus.isRecording(),
+      }, '*');
+    } else if (event.data.type === '__FLOWTRACE_PLATFORM_LAUNCH__') {
+      chrome.runtime.sendMessage({
+        action: 'PLATFORM_LAUNCH_SESSION',
+        ...(event.data.payload || {}),
+      }, (res) => {
+        window.postMessage({
+          type: '__FLOWTRACE_PLATFORM_LAUNCH_RESPONSE__',
+          result: res,
+        }, '*');
+      });
+    }
+  });
+
+  // Announce recorder presence on load
+  try {
+    window.postMessage({ type: '__FLOWTRACE_RECORDER_DETECTED__', installed: true, version: '1.0.0' }, '*');
+  } catch {}
 }
+
 
 function activate(patchId, eventCount) {
   const patch = getPatch(patchId);
@@ -79,6 +108,10 @@ function activate(patchId, eventCount) {
       patchId: patch.id,
       patchName: patch.name,
       onStop: () => bus.requestStop(),
+      onPauseToggle: (paused) => {
+        if (paused) bus.requestPause();
+        else bus.requestResume();
+      },
     });
     setWidgetCount(eventCount);
   }

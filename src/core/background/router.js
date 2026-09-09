@@ -155,6 +155,17 @@ export function createRouter(patches) {
     },
 
     UPLOAD_RECORDING: (msg) => uploadRecording(msg),
+
+    // ── platform direct bridge ──────────────────────────────────────────────
+    PING_EXTENSION: () => ({
+      success: true,
+      installed: true,
+      version: '1.0.0',
+      authenticated: auth.isAuthenticated(),
+      isRecording: session.get().isRecording,
+    }),
+
+    PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
 
   return async function route(msg, sender) {
@@ -164,6 +175,7 @@ export function createRouter(patches) {
     return handler(msg, sender);
   };
 }
+
 
 async function startRecording(msg, patches) {
   // THE GATE. It is here, in the service worker, and not in the popup, because
@@ -222,6 +234,126 @@ async function startRecording(msg, patches) {
 
   return { success: true, environment, session: session.forTransport() };
 }
+
+async function platformLaunchSession(msg, patches) {
+  // 1. Sync token & user from Platform if provided
+  if (msg.token) {
+    try {
+      await auth.setSessionToken(msg.token, msg.user || null);
+    } catch (e) {
+      console.warn('[recorder] could not sync platform session token:', e.message);
+    }
+  }
+
+  // 2. Set target environment in recorder settings
+  if (msg.environment) {
+    try {
+      await setEnvironment(msg.environment);
+    } catch (e) {
+      console.warn('[recorder] could not set environment from platform launch:', e.message);
+    }
+  }
+
+  const targetUrl = msg.targetUrl || msg.instance?.baseUrl || msg.url;
+  if (!targetUrl) {
+    return { success: false, error: 'Target URL or Instance URL is required to launch recording.' };
+  }
+
+  const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : 'oracle';
+
+  // 3. Open new tab with target URL
+  let tab;
+  try {
+    tab = await chrome.tabs.create({ url: targetUrl, active: true });
+  } catch (err) {
+    return { success: false, error: `Failed to open tab: ${err.message}` };
+  }
+
+  if (!tab || !tab.id) {
+    return { success: false, error: 'Failed to create browser tab.' };
+  }
+
+  // 4. Wait for the initial page load
+  await waitForTabComplete(tab.id, 10_000);
+
+  // 5. Inject recorder content scripts into the page
+  await inject(tab.id);
+
+  // 6. Handle automated login if requested and credentials are provided
+  if (msg.autoLogin && msg.credentials && (msg.credentials.username || msg.credentials.password)) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: 'AUTO_FILL_LOGIN',
+        username: msg.credentials.username || '',
+        password: msg.credentials.password || '',
+        submit: msg.autoSubmit !== false,
+      });
+      // Allow the form submit navigation to initiate and complete
+      await new Promise((r) => setTimeout(r, 2000));
+      await waitForTabComplete(tab.id, 8_000);
+      await inject(tab.id);
+    } catch (e) {
+      console.warn('[recorder] auto-fill login injection notice:', e.message);
+    }
+  }
+
+  // 7. Handle deep link navigation if specified and different from initial landing
+  if (msg.deepLinkUrl && msg.deepLinkUrl !== targetUrl) {
+    try {
+      await chrome.tabs.update(tab.id, { url: msg.deepLinkUrl });
+      await waitForTabComplete(tab.id, 8_000);
+      await inject(tab.id);
+    } catch (e) {
+      console.warn('[recorder] deep link navigation notice:', e.message);
+    }
+  }
+
+  // Retrieve latest tab info
+  let currentTabUrl = targetUrl;
+  try {
+    const updatedTab = await chrome.tabs.get(tab.id);
+    if (updatedTab && updatedTab.url) currentTabUrl = updatedTab.url;
+  } catch (_) {}
+
+  // 8. Start recording session on the active tab
+  const startResult = await startRecording({
+    tabId: tab.id,
+    tabUrl: currentTabUrl,
+    patchId,
+  }, patches);
+
+  return {
+    success: true,
+    tabId: tab.id,
+    targetUrl: currentTabUrl,
+    environment: await getEnvironment(),
+    startResult,
+  };
+}
+
+function waitForTabComplete(tabId, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const listener = (tid, info) => {
+      if (tid === tabId && info.status === 'complete') {
+        if (!resolved) {
+          resolved = true;
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }, timeoutMs);
+  });
+}
+
 
 async function stopRecording(patches) {
   const s = session.get();

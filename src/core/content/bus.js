@@ -102,6 +102,14 @@ export function requestStop() {
   send({ action: 'STOP_RECORDING' });
 }
 
+export function requestPause() {
+  send({ action: 'PAUSE_RECORDING' });
+}
+
+export function requestResume() {
+  send({ action: 'RESUME_RECORDING' });
+}
+
 function send(message) {
   try {
     if (!chrome?.runtime?.id) return; // context invalidated

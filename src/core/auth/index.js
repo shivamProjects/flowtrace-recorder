@@ -127,6 +127,13 @@ async function finish(login) {
   return { success: true, user: store.getUser() };
 }
 
+/** Sync token and user directly from trusted platform web application launch. */
+export async function setSessionToken(token, user) {
+  if (!token) return;
+  await store.save(token, user || null);
+}
+
+
 /**
  * Re-ask the server who this token belongs to.
  *

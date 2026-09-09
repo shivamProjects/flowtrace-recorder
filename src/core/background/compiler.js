@@ -65,12 +65,14 @@ export function compileSteps(events) {
   const steps = [];
   let previousUrl = null;
 
-  for (const event of events) {
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
     const statement = toStatement(event, previousUrl);
     if (!statement) continue;
 
     steps.push({
       type: 'code',
+      actionIndex: i,
       code: statement.replace(/^await\s+/, '').replace(/;$/, ''),
       rawCode: statement,
       // Frame identity travels with the step as well as being compiled into

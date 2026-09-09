@@ -117,6 +117,7 @@ export async function uploadRecording(msg) {
       sourceUrl: s.sourceUrl,
       patchId: s.patchId,
       actions: s.actions,
+      steps: s.steps,
     })),
     name,
     description,
