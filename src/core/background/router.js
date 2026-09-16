@@ -157,11 +157,16 @@ export function createRouter(patches) {
     UPLOAD_RECORDING: (msg) => uploadRecording(msg),
 
     // ── platform direct bridge ──────────────────────────────────────────────
-    PING_EXTENSION: () => ({
+    // `authenticated` is AWAITED. It looks like a detail and is not: without the
+    // await this returns a Promise, which structured-clones across the message
+    // boundary as `{}` — truthy in JavaScript, so a platform doing
+    // `if (ping.authenticated)` was told TRUE for a signed-out user, every time.
+    // Observed live against nitro before the fix: {"authenticated":{}}.
+    PING_EXTENSION: async () => ({
       success: true,
       installed: true,
       version: '1.0.0',
-      authenticated: auth.isAuthenticated(),
+      authenticated: await auth.isAuthenticated(),
       isRecording: session.get().isRecording,
     }),
 
@@ -322,8 +327,28 @@ async function platformLaunchSession(msg, patches) {
     patchId,
   }, patches);
 
+  // SUCCESS IS DERIVED FROM startRecording, NOT ASSERTED.
+  //
+  // This used to return a hardcoded `success: true` with the real outcome buried
+  // in the sibling `startResult`. startRecording produces three well-shaped
+  // refusals — `unauthenticated` (:197), `environmentRequired` (:210) and
+  // "Recording already in progress." (:218) — and all three were discarded here.
+  //
+  // The environment one is a DATA-LOSS path, not a cosmetic lie: its own comment
+  // above says refusing at Start costs a click while refusing at Save costs the
+  // entire recording. A caller told `success: true` records the whole flow and
+  // loses it at save, which is precisely the failure the gate exists to prevent.
+  //
+  // The discriminators are propagated to the top level so the platform can say
+  // "sign in" or "choose an environment" rather than a generic "launch failed" —
+  // telling a user their launch failed when they only need to sign in is its own
+  // small lie. `startResult` is still returned whole for callers that want it.
+  const ok = startResult?.success === true;
   return {
-    success: true,
+    success: ok,
+    ...(ok ? {} : { error: startResult?.error || 'Recording did not start.' }),
+    ...(startResult?.unauthenticated ? { unauthenticated: true } : {}),
+    ...(startResult?.environmentRequired ? { environmentRequired: true } : {}),
     tabId: tab.id,
     targetUrl: currentTabUrl,
     environment: await getEnvironment(),
