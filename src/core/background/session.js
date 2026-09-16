@@ -71,6 +71,53 @@ export async function persist() {
   }
 }
 
+/* ── Coalesced persistence for the capture hot path ─────────────────────────
+ *
+ * RECORD_EVENT used to persist only every 5th event, which meant an MV3 service
+ * worker eviction lost up to FOUR captured interactions — silently, with no
+ * marker in the restored session. The operator sees a recording that looks
+ * complete and is not, which is the one thing a recorder must never do.
+ *
+ * Persisting on every event is the obvious fix and the wrong one: `persist()`
+ * writes the WHOLE session, so a fast burst of interactions would queue a
+ * full-session write behind each one. The batching was a real optimisation, not
+ * a premature one.
+ *
+ * So: never drop an event, but collapse a burst into one write. Each call marks
+ * the session dirty and schedules a flush; calls arriving while a flush is
+ * pending are absorbed by it. The longest any event can be unpersisted is
+ * COALESCE_MS, not four interactions of unbounded duration.
+ *
+ * `flush()` exists for the paths that must not defer — stop, pause, upload —
+ * where a write that has not landed is a write that may never land.
+ */
+const COALESCE_MS = 250;
+let pendingFlush = null;
+let dirty = false;
+
+export function persistSoon() {
+  dirty = true;
+  if (pendingFlush) return pendingFlush;
+  pendingFlush = new Promise((resolve) => {
+    setTimeout(async () => {
+      pendingFlush = null;
+      dirty = false;
+      await persist();
+      resolve();
+    }, COALESCE_MS);
+  });
+  return pendingFlush;
+}
+
+/** Persist now, absorbing any scheduled write. Use before anything terminal. */
+export async function flush() {
+  if (pendingFlush) await pendingFlush;
+  if (dirty) {
+    dirty = false;
+    await persist();
+  }
+}
+
 export async function clear() {
   session = blankSession(session.patchId);
   await chrome.storage.local.remove(STORAGE_KEY);

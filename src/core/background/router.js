@@ -106,8 +106,15 @@ export function createRouter(patches) {
       // event first becomes something that gets persisted to disk — the cheapest
       // possible check stands between a bug upstream and a stored password.
       s.events.push(maskEvent(msg.event));
-      // Batched to keep storage writes off every single interaction.
-      if (s.events.length % 5 === 0) await session.persist();
+      // EVERY event is persisted. This used to write only every 5th one, so an
+      // MV3 worker eviction silently lost up to four captured interactions and
+      // the restored session carried no sign that anything was missing.
+      //
+      // persistSoon() coalesces rather than defers selectively: a burst of
+      // interactions collapses into one write, so the storage cost that
+      // motivated the batching is still avoided, but no event is ever outside
+      // the write that covers it.
+      session.persistSoon();
       return { accepted: true, totalEvents: s.events.length };
     },
 
