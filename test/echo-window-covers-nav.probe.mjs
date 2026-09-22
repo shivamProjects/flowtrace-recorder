@@ -60,11 +60,33 @@ check('__SF_ECHO_RETAIN_MS is declared in the page script', !!m);
 const RETAIN = Number(m[1]);
 
 // ── the measured evidence ──────────────────────────────────────────────────
+// Adjacent duplicate pairs — same selector, nothing in between. Two tenants,
+// two separate recordings; dev29 confirms the dev93 figures independently.
 const ECHO_GAPS = [
+  // dev93, Period Close
   ['Period Close', 532], ['General Ledger', 816],
   ['Open Period', 535], ['Done', 555],
+  // dev29, Period Close — a different tenant and a different nav route
+  ['Expand General Accounting (dev29)', 505],
+  ['Open Period (dev29)', 532],
+  ['Done (dev29)', 531],
 ];
+
+// Repeats the operator really made, which must still record.
+//
+// The #clusters-right-nav presses are paced (2115/2145ms). "Select Period" is
+// the subtler case: it repeats 995ms after itself, INSIDE this window — but a
+// completed Select Ledger sits between the two (committedValue present), so the
+// first click's replay had already resolved and this is a real re-click. The
+// operator re-picks the period because choosing a Ledger re-queries the grid
+// and clears the row selection.
+//
+// It is safe from suppression for a structural reason, not a timing one: the
+// retention entry is keyed to the element of the action being replayed, and an
+// unrelated action completed in between. Timing alone would NOT save it, which
+// is why the guard must stay identity-based — see the assertions below.
 const REAL_REPEATS = [['clusters-right-nav 1->2', 2115], ['clusters-right-nav 2->3', 2145]];
+const NON_ADJACENT_REAL = [['Select Period (dev29, Ledger select between)', 995]];
 
 const worstEcho = Math.max(...ECHO_GAPS.map(([, g]) => g));
 const closestReal = Math.min(...REAL_REPEATS.map(([, g]) => g));
@@ -86,6 +108,19 @@ for (const [name, gap] of REAL_REPEATS) {
 check('there is real margin on both sides',
   RETAIN - worstEcho >= 200 && closestReal - RETAIN >= 200,
   `echo margin ${RETAIN - worstEcho}ms, repeat margin ${closestReal - RETAIN}ms`);
+
+// A real repeat can fall INSIDE the window when another action separates it
+// from its twin. Timing cannot tell that apart from an echo — only identity
+// can, because the retention entry belongs to the replayed action's element and
+// an intervening action releases its own. Assert the case exists so nobody
+// "fixes" duplicates by matching on selector + elapsed time.
+for (const [name, gap] of NON_ADJACENT_REAL) {
+  check(`${name} is inside the ${RETAIN}ms window and must survive anyway`,
+    gap < RETAIN,
+    `gap ${gap}ms — if this were ever suppressed the Period Close flow would `
+    + 'lose the re-click that re-establishes the row selection after the '
+    + 'Ledger re-query');
+}
 
 // ── the guard around it must still be intact ───────────────────────────────
 check('retention entries are still swept when they expire',
