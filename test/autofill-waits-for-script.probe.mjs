@@ -49,7 +49,17 @@ const src = readFileSync(BG, 'utf8');
 // ── the helper exists and polls the right thing ────────────────────────────
 const fnStart = src.indexOf('async function waitForContentScript(');
 check('waitForContentScript is defined', fnStart !== -1);
-const fnBody = src.slice(fnStart, fnStart + 1600);
+// Slice to the function's real closing brace rather than a fixed length — a
+// fixed 1600 silently truncated the body once the form-wait was added, and the
+// assertion below failed for the wrong reason.
+const fnBody = (() => {
+  let depth = 0;
+  for (let p = src.indexOf('{', fnStart); p < src.length; p++) {
+    if (src[p] === '{') depth++;
+    else if (src[p] === '}') { depth--; if (depth === 0) return src.slice(fnStart, p + 1); }
+  }
+  return src.slice(fnStart, fnStart + 4000);
+})();
 
 check('it polls probeLoginState (an actual round trip)',
   /probeLoginState\(tabId\)/.test(fnBody),
@@ -58,7 +68,20 @@ check('it gives up if the tab has gone',
   /chrome\.tabs\.get\(tabId\)[\s\S]{0,80}return false/.test(fnBody),
   'a closed tab will never answer — polling on would waste the whole budget');
 check('it is bounded by a budget', /Date\.now\(\) - started < budget/.test(fnBody));
-check('it reports how long it waited', /content script reachable after/.test(fnBody));
+check('it reports how long it waited',
+  /after \$\{Date\.now\(\) - started\}ms/.test(fnBody));
+
+// A reply is not the same as the right document. Measured on dev29 with the
+// timing fix in place: the poll answered after 27ms on the FIRST try, from the
+// /oauth2/v1/authorize document that was about to be replaced. The fill went
+// out against it and failed twice; the sign-in document answered 532ms later.
+check('THE SECOND FIX: it can wait for the LOGIN FORM, not just a reply',
+  /needLoginForm/.test(fnBody) && /state\.hasLoginForm/.test(fnBody),
+  'probeLoginState already returns hasLoginForm; discarding it is what left '
+  + 'attempt 1 failing after the timing fix');
+check('it distinguishes "no script" from "script but no form" when it times out',
+  /a content script answered but no login form appeared/.test(fnBody),
+  'those are different failures and need different responses');
 
 // ── defect 1: the fixed 4s sleep before the first fill is gone ─────────────
 const execStart = src.indexOf('async function executePendingRecordNow');
@@ -103,14 +126,34 @@ check('the mid-auth guard is intact',
 
 // ── behavioural model over the tester's REAL numbers ───────────────────────
 // Budgets as written, read back from the source so the model cannot drift.
-const midAuthBudget = Number((src.match(/const reachable = await waitForContentScript\(tabId, (\d+)\)/) || [])[1]);
-const firstBudget = Number((src.match(/waitForContentScript\(tab\.id, (\d+)\)/) || [])[1]);
+const midAuthBudget = Number((src.match(/const reachable = await waitForContentScript\(tabId, (\d+)/) || [])[1]);
+const firstBudget = Number((src.match(/waitForContentScript\(tab\.id, (\d+)/) || [])[1]);
+
+// Both fills must require the form, or the /authorize hop answers first.
+check('the first fill waits for the login form',
+  /waitForContentScript\(tab\.id, \d+, undefined, true\)/.test(src));
+check('the mid-auth retry waits for the login form',
+  /waitForContentScript\(tabId, \d+, undefined, true\)/.test(src));
 check('mid-auth poll budget is read from source', Number.isFinite(midAuthBudget), String(midAuthBudget));
 check('first-fill poll budget is read from source', Number.isFinite(firstBudget), String(firstBudget));
 
 // The log shows the script announcing itself on /ui/v1/signin well inside these
-// budgets. Worst observed dead wait was 56,991ms.
-const OBSERVED_WORST_MS = 56991;
+// budgets.
+//
+// A later log raised the worst case sharply: a run that hit the mid-auth path
+// TWICE burned two 60s waitForTabComplete defaults back to back —
+//
+//     +9,719ms   sending auto-fill
+//                attempt 1 failed -> mid-authentication, retry
+//                attempt 2 failed -> mid-authentication, retry
+//     +132,074ms auto-fill success   (attempt 3)
+//
+// 122,355ms of dead wait inside a 146,954ms run. The per-retry cost is bounded
+// by the 60s default, so N retries cost ~N x 60s; nothing capped the total.
+// That is why the budgets below are checked against the BEST case rather than
+// the worst — the worst has no natural ceiling, so beating it is not a
+// meaningful bar.
+const OBSERVED_WORST_MS = 122355;
 const OBSERVED_BEST_MS = 26475;
 check('the mid-auth budget is far below the worst observed dead wait',
   midAuthBudget < OBSERVED_BEST_MS,
