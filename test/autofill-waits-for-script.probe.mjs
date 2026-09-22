@@ -153,6 +153,16 @@ check('first-fill poll budget is read from source', Number.isFinite(firstBudget)
 // That is why the budgets below are checked against the BEST case rather than
 // the worst — the worst has no natural ceiling, so beating it is not a
 // meaningful bar.
+// CAUTION on these numbers. They are durations from logs captured on DIFFERENT
+// devices and sessions, so they are NOT a controlled before/after: machine
+// speed, network, tenant load, and whether an operator was actively driving the
+// run all vary. Do not quote a "Nx faster" from them.
+//
+// What they ARE good for is bounding the OLD code path from the inside: the
+// dead wait came from waitForTabComplete(tabId) taking its 60000ms default on a
+// document whose 'complete' had already fired, so N mid-auth retries cost
+// ~N x 60s regardless of hardware. 26,475ms is the smallest such wait observed
+// and is used below only as a ceiling the new budgets must stay under.
 const OBSERVED_WORST_MS = 122355;
 const OBSERVED_BEST_MS = 26475;
 check('the mid-auth budget is far below the worst observed dead wait',
@@ -163,7 +173,9 @@ const worstNow = firstBudget + midAuthBudget;   // both budgets exhausted
 check('even the worst case now beats the best case before',
   worstNow < OBSERVED_BEST_MS,
   `worst now ${worstNow}ms vs ${OBSERVED_BEST_MS}ms observed best before`);
-console.log(`        saving vs worst observed: ${OBSERVED_WORST_MS - worstNow}ms`);
+// Deliberately not phrased as a "saving": that would compare across devices.
+// The budgets are a CEILING the new code cannot exceed; the old path had none.
+console.log(`        new ceiling ${worstNow}ms vs old path's unbounded ~N x 60s retries`);
 
 // ── mutation check ─────────────────────────────────────────────────────────
 {
