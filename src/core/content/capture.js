@@ -54,11 +54,21 @@ export function stopCapture() {
   }
   for (const off of listeners) off();
   listeners = [];
-  for (const t of fillTimers.values()) clearTimeout(t);
-  fillTimers.clear();
+  flushPendingFills();
   patch = null;
   ctx = null;
   return snapshot;
+}
+
+function flushPendingFills(excludeTarget = null) {
+  for (const [key, entry] of fillTimers.entries()) {
+    if (excludeTarget && (entry.target === excludeTarget || entry.target.contains(excludeTarget))) {
+      continue;
+    }
+    clearTimeout(entry.timer);
+    fillTimers.delete(key);
+    entry.flush();
+  }
 }
 
 // ── event construction ──────────────────────────────────────────────────────
@@ -184,6 +194,10 @@ function onClick(e) {
   if (!target || !target.closest) return;
   if (isWidgetNode(target)) return;
 
+  // Flush any pending debounced fills so that a fill preceding this click is
+  // emitted BEFORE the click, preserving chronological user interaction order.
+  flushPendingFills(target);
+
   // The patch gets first refusal. Returning true means it has already emitted
   // something more accurate than a generic click — an LOV row selection, a date
   // fill — and the core must not also emit.
@@ -235,10 +249,10 @@ function onInput(e) {
 
   // Emit one fill per pause rather than one per keystroke.
   const key = generateSelector(target).selector;
-  clearTimeout(fillTimers.get(key));
+  const existing = fillTimers.get(key);
+  if (existing) clearTimeout(existing.timer);
   const stillOurs = bus.guard();
-  fillTimers.set(key, setTimeout(() => {
-    fillTimers.delete(key);
+  const flush = () => {
     if (!stillOurs()) return;
     // `target.value` is never read for a credential field. The mask is passed
     // in place of it rather than written over it afterwards, so the secret is
@@ -246,13 +260,26 @@ function onInput(e) {
     send(makeEvent('fill', target, isCredentialField(target)
       ? maskedFields()
       : { value: target.value }));
-  }, FILL_DEBOUNCE_MS));
+  };
+  const timer = setTimeout(() => {
+    fillTimers.delete(key);
+    flush();
+  }, FILL_DEBOUNCE_MS);
+  fillTimers.set(key, { timer, flush, target });
 }
 
 function onChange(e) {
   if (!bus.isRecording()) return;
   const target = e.target;
   if (!target) return;
+
+  const key = generateSelector(target)?.selector;
+  if (key && fillTimers.has(key)) {
+    const entry = fillTimers.get(key);
+    clearTimeout(entry.timer);
+    fillTimers.delete(key);
+    entry.flush();
+  }
 
   safeInvoke(`${patch.id}.onChange`, patch.capture.onChange, undefined, target, e, ctx);
 
