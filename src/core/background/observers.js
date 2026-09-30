@@ -146,9 +146,19 @@ export class LifecycleObservers {
     this.correlator = options.correlator;
     this.onEffectCaptured = options.onEffectCaptured || (() => {});
     this.injectContentScript = options.injectContentScript || (async () => {});
+    this.broadcast = options.broadcast || (async () => {});
+    this.getPatchId = options.getPatchId || (() => null);
 
     this._listeners = [];
     this._active = false;
+  }
+
+  /**
+   * Whether the observers are currently active and listening.
+   * @returns {boolean}
+   */
+  isActive() {
+    return this._active;
   }
 
   /**
@@ -184,9 +194,10 @@ export class LifecycleObservers {
           this.correlator.correlateEffect(effect);
           this.onEffectCaptured(effect);
 
-          // Auto-inject content script into the new popup tab
+          // Auto-inject content script into the new popup tab and activate recording
           try {
             await this.injectContentScript(tab.id);
+            await this.broadcast(tab.id, '__flowtrace_activate__', { patchId: this.getPatchId() });
           } catch (err) {
             console.warn('[observers] failed to inject script in popup:', err);
           }

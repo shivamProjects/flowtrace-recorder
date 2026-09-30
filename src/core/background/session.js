@@ -60,7 +60,29 @@ export function getLifecycleObservers() {
   return lifecycleObservers;
 }
 
-export function initLifecycleObservers(injectFn) {
+let savedInjectFn = null;
+let savedBroadcastFn = null;
+
+export function setInjectFunction(fn) {
+  savedInjectFn = fn;
+}
+
+export function getInjectFunction() {
+  return savedInjectFn;
+}
+
+export function setBroadcastFunction(fn) {
+  savedBroadcastFn = fn;
+}
+
+export function getBroadcastFunction() {
+  return savedBroadcastFn;
+}
+
+export function initLifecycleObservers(injectFn, broadcastFn) {
+  if (injectFn) savedInjectFn = injectFn;
+  if (broadcastFn) savedBroadcastFn = broadcastFn;
+
   if (!lifecycleObservers) {
     lifecycleObservers = new LifecycleObservers({
       surfaceRegistry,
@@ -70,7 +92,9 @@ export function initLifecycleObservers(injectFn) {
         session.surfaceState = surfaceRegistry.toJSON();
         persistSoon();
       },
-      injectContentScript: injectFn,
+      injectContentScript: (tabId) => savedInjectFn ? savedInjectFn(tabId) : Promise.resolve(),
+      broadcast: (tabId, eventName, detail) => savedBroadcastFn ? savedBroadcastFn(tabId, eventName, detail) : Promise.resolve(),
+      getPatchId: () => session.patchId,
     });
   }
   return lifecycleObservers;
@@ -104,6 +128,13 @@ export async function ensureLoaded() {
     }
     if (!session.isRecording && stored[PREFERENCE_KEY]) {
       session.patchId = stored[PREFERENCE_KEY];
+    }
+    // MV3 Worker Recovery: re-arm observers if an active recording was restored
+    if (session.isRecording && !session.isPaused) {
+      const observers = initLifecycleObservers();
+      if (observers && !observers.isActive()) {
+        observers.start();
+      }
     }
   } catch (err) {
     console.warn('[recorder] could not restore session:', err.message);
@@ -168,8 +199,15 @@ export async function flush() {
 }
 
 export async function clear() {
+  if (lifecycleObservers) {
+    lifecycleObservers.stop();
+  }
+  surfaceRegistry.clear();
+  effectCorrelator.clear();
   session = blankSession(session.patchId);
-  await chrome.storage.local.remove(STORAGE_KEY);
+  if (typeof chrome !== 'undefined' && chrome.storage?.local?.remove) {
+    await chrome.storage.local.remove(STORAGE_KEY);
+  }
 }
 
 export async function rememberPatchPreference(patchId) {

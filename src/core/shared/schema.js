@@ -245,14 +245,16 @@ function validateLocator(action, at, verb) {
   return problems;
 }
 
+const FRAME_KEYS = new Set(['url', 'name', 'selector', 'path']);
+
 function validateFrame(frame, at, verb) {
   if (frame === undefined) return [];
   if (!frame || typeof frame !== 'object' || Array.isArray(frame)) {
     return [`${at} (${verb}): frame is not an object`];
   }
   return Object.keys(frame)
-    .filter((key) => key !== 'url' && key !== 'name')
-    .map((key) => `${at} (${verb}): frame."${key}" is not url or name`);
+    .filter((key) => !FRAME_KEYS.has(key))
+    .map((key) => `${at} (${verb}): frame."${key}" is not url, name, selector or path`);
 }
 
 /** Every problem in a whole recording's action list. */

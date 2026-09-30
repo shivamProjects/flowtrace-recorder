@@ -20,6 +20,9 @@ import { listEnvironments, uploadRecording } from './upload.js';
  *   The registry, injected so this module does not import from patches/.
  */
 export function createRouter(patches) {
+  session.setInjectFunction(inject);
+  session.setBroadcastFunction(broadcast);
+
   const handlers = {
     GET_STATUS: () => ({ session: session.forTransport() }),
 
@@ -115,14 +118,17 @@ export function createRouter(patches) {
         msg.event.surfaceId = surface.surfaceId;
       }
 
-      // Record for asynchronous effect correlation (popups, navigations, downloads)
-      session.getEffectCorrelator().recordAction(msg.event);
-
       // The content script masks credentials before sending, so this should
       // always be a no-op. It runs anyway because this is the boundary where an
       // event first becomes something that gets persisted to disk — the cheapest
       // possible check stands between a bug upstream and a stored password.
-      s.events.push(maskEvent(msg.event));
+      const masked = maskEvent(msg.event);
+      s.events.push(masked);
+
+      // Record for asynchronous effect correlation (popups, navigations, downloads)
+      // Must pass the exact reference in s.events so correlated effects mutate the durable session event.
+      session.getEffectCorrelator().recordAction(masked);
+
       session.persistSoon();
       return { accepted: true, totalEvents: s.events.length, surfaceId: msg.event.surfaceId };
     },
@@ -249,7 +255,7 @@ async function startRecording(msg, patches) {
   surfaceRegistry.registerPrimary(msg.tabId, { url: msg.tabUrl });
 
   // Start zero-CDP lifecycle observers (popups, navigations, downloads)
-  session.initLifecycleObservers(inject).start();
+  session.initLifecycleObservers(inject, broadcast).start();
 
   if (msg.tabUrl && !msg.tabUrl.startsWith('chrome://') && msg.tabUrl !== 'about:blank') {
     const navEvent = makeNavigateEvent(msg.tabUrl);

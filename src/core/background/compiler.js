@@ -81,11 +81,15 @@ export function compileSteps(events) {
       // an explicit null: a null reads as "this frame has no name", where
       // absent reads as "nothing addressable was found", which is what
       // frameIdentity() actually reports.
+      ...(event.surfaceId ? { surfaceId: event.surfaceId } : {}),
+      ...(event.effects?.length ? { effects: event.effects } : {}),
       ...(event.isTopFrame === false
         ? {
           frame: {
             url: event.frameUrl,
             ...(event.frameName ? { name: event.frameName } : {}),
+            ...(event.frameSelector ? { selector: event.frameSelector } : {}),
+            ...(event.framePath?.length ? { path: event.framePath } : {}),
           },
         }
         : {}),
@@ -286,9 +290,14 @@ function element(action, event, extra = {}) {
   // → title, or by URL path. It throws when the frame is absent rather than
   // falling back to the top document, because the top frame routinely holds a
   // control with the same accessible name.
+  if (event.surfaceId) out.surfaceId = event.surfaceId;
+  if (event.effects && event.effects.length) out.effects = event.effects;
+
   if (event.isTopFrame === false) {
     out.frame = { url: event.frameUrl };
     if (event.frameName) out.frame.name = event.frameName;
+    if (event.frameSelector) out.frame.selector = event.frameSelector;
+    if (event.framePath && event.framePath.length) out.frame.path = event.framePath;
   }
   return out;
 }
@@ -427,12 +436,21 @@ function locatorFor(event) {
  */
 function scopeToFrame(expression, event) {
   if (!expression || event.isTopFrame !== false) return expression;
+  if (event.framePath && event.framePath.length > 0) {
+    const chain = event.framePath.map((sel) => `frameLocator(${jsString(sel)})`).join('.');
+    return expression.replace(/^page\./, `page.${chain}.`);
+  }
   const name = event.frameName;
-  if (!name) return expression;
-  const selector = ['name', 'title', 'id']
-    .map((attr) => `iframe[${attr}="${name}"]`)
-    .join(', ');
-  return expression.replace(/^page\./, `page.frameLocator(${jsString(selector)}).`);
+  if (name) {
+    const selector = ['name', 'title', 'id']
+      .map((attr) => `iframe[${attr}="${name}"]`)
+      .join(', ');
+    return expression.replace(/^page\./, `page.frameLocator(${jsString(selector)}).`);
+  }
+  if (event.frameSelector) {
+    return expression.replace(/^page\./, `page.frameLocator(${jsString(event.frameSelector)}).`);
+  }
+  return expression;
 }
 
 /**
