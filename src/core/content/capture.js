@@ -47,7 +47,7 @@ export function startCapture(activePatch) {
   // Install detached file upload interceptor
   fileCapture = new FileCapture({
     onFileSelected: (uploadEvent) => {
-      const initiator = uploadEvent.initiator || (document.body ? document.body : null);
+      const initiator = uploadEvent.initiatorElement || uploadEvent.initiator || (document.body ? document.body : null);
       const ev = makeEvent('upload', initiator, {
         files: uploadEvent.files,
         value: uploadEvent.files.map((f) => f.name).join(', '),

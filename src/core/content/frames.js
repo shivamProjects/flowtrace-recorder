@@ -30,18 +30,74 @@ export function frameInfo() {
       frameUrl: window.location.href,
       isTopFrame: true,
       frameName: null,
+      framePath: [],
     };
   }
 
   const identity = frameIdentity();
   const selector = frameSelector();
+  const ancestry = frameAncestryPath();
 
   return {
     frameUrl: window.location.href,
     isTopFrame: false,
     frameName: identity,
     frameSelector: selector,
+    framePath: ancestry,
   };
+}
+
+/**
+ * Build hierarchical framePath traversing frame ancestors up to top.
+ * @returns {string[]}
+ */
+export function frameAncestryPath() {
+  const chain = [];
+  try {
+    let curr = window;
+    while (curr && curr !== curr.top) {
+      const el = curr.frameElement;
+      if (el) {
+        const sel = deriveElementFrameSelector(el);
+        if (sel) chain.unshift(sel);
+      }
+      if (curr === curr.parent) break;
+      curr = curr.parent;
+    }
+  } catch {
+    // Cross-origin boundaries throw; return whatever hierarchy was reachable
+  }
+
+  if (chain.length === 0) {
+    const sel = frameSelector();
+    if (sel) chain.push(sel);
+  }
+  return chain;
+}
+
+function deriveElementFrameSelector(el) {
+  if (!el) return null;
+  try {
+    const name = el.getAttribute('name');
+    if (name) return `iframe[name="${escapeAttr(name)}"]`;
+
+    const id = el.id;
+    if (id) return `iframe#${escapeAttr(id)}`;
+
+    const title = el.getAttribute('title');
+    if (title) return `iframe[title="${escapeAttr(title)}"]`;
+
+    const src = el.getAttribute('src');
+    if (src && !src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('about:')) {
+      const pathname = new URL(src, window.location.href).pathname;
+      if (pathname && pathname !== '/') {
+        return `iframe[src*="${escapeAttr(pathname)}"]`;
+      }
+    }
+    return 'iframe';
+  } catch {
+    return 'iframe';
+  }
 }
 
 /**

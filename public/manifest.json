@@ -9,7 +9,9 @@
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "webNavigation",
+    "downloads"
   ],
 
   "host_permissions": [
