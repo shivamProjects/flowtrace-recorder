@@ -14,21 +14,72 @@
  * captured is not possible.
  */
 
-/** @returns {{frameUrl: string, isTopFrame: boolean, frameName: string|null}} */
+/**
+ * @returns {{
+ *   frameUrl: string,
+ *   isTopFrame: boolean,
+ *   frameName: string|null,
+ *   frameSelector?: string|null,
+ *   framePath?: string[],
+ * }}
+ */
 export function frameInfo() {
-  const isTopFrame = window === window.top;
+  const isTop = isTopFrame();
+  if (isTop) {
+    return {
+      frameUrl: window.location.href,
+      isTopFrame: true,
+      frameName: null,
+    };
+  }
+
+  const identity = frameIdentity();
+  const selector = frameSelector();
+
   return {
     frameUrl: window.location.href,
-    isTopFrame,
-    frameName: isTopFrame ? null : frameIdentity(),
+    isTopFrame: false,
+    frameName: identity,
+    frameSelector: selector,
   };
+}
+
+/**
+ * Derive a stable Playwright selector for the current frame element.
+ * @returns {string|null}
+ */
+function frameSelector() {
+  try {
+    const el = window.frameElement;
+    if (!el) return null;
+
+    const name = el.getAttribute('name');
+    if (name) return `iframe[name="${escapeAttr(name)}"]`;
+
+    const id = el.id;
+    if (id) return `iframe#${escapeAttr(id)}`;
+
+    const title = el.getAttribute('title');
+    if (title) return `iframe[title="${escapeAttr(title)}"]`;
+
+    const src = el.getAttribute('src');
+    if (src && !src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('about:')) {
+      const pathname = new URL(src, window.location.href).pathname;
+      if (pathname && pathname !== '/') {
+        return `iframe[src*="${escapeAttr(pathname)}"]`;
+      }
+    }
+
+    return 'iframe';
+  } catch {
+    return null;
+  }
 }
 
 /**
  * A stable-ish handle for the current frame, from the attributes Playwright's
  * frameLocator can address: `name`, then `title`, then `id`.
- * Returns null when the frame carries none of them, which is the honest answer
- * — a frame with no addressable attribute cannot be targeted by name later.
+ * Returns null when the frame carries none of them.
  */
 function frameIdentity() {
   try {
@@ -40,7 +91,15 @@ function frameIdentity() {
   }
 }
 
+function escapeAttr(s) {
+  return String(s || '').replace(/"/g, '\\"');
+}
+
 /** True when this frame should own singleton UI such as the recording widget. */
 export function isTopFrame() {
-  return window === window.top;
+  try {
+    return window === window.top;
+  } catch {
+    return false;
+  }
 }

@@ -2,22 +2,51 @@
  * observers.js — Zero-CDP browser-level lifecycle observers and effect correlators.
  *
  * Replaces CDP's Target.attachedToTarget, Page.frameNavigated, and Page.downloadWillBegin
- * using standard, robust Chrome extension APIs:
+ * using standard Chrome extension APIs:
  *   1. PopupObserver: captures popups, tracks openerTabId, auto-injects content script.
  *   2. NavigationObserver: tracks URL changes, webNavigation lifecycle, and SPA transitions.
  *   3. DownloadObserver: tracks file downloads triggered by user interactions.
- *   4. EffectCorrelator: correlates asynchronous browser effects back to initiating actions.
+ *   4. EffectCorrelator: domain-specific correlation binding asynchronous browser effects
+ *      back to initiating actions with distinct temporal windows and trigger criteria.
  */
+
+/** Correlation configuration per effect type. */
+const CORRELATION_RULES = {
+  popup: {
+    maxWindowMs: 3500,
+    validTriggerVerbs: new Set(['click', 'submit', 'press']),
+    requiresOpenerMatch: true,
+  },
+  navigation: {
+    maxWindowMs: 4000,
+    validTriggerVerbs: new Set(['click', 'submit', 'change', 'selectOption', 'press', 'check', 'uncheck']),
+    requiresSameSurface: true,
+  },
+  download: {
+    maxWindowMs: 5000,
+    validTriggerVerbs: new Set(['click', 'submit', 'press']),
+    requiresSameSurface: true,
+  },
+  dialog: {
+    maxWindowMs: 2500,
+    validTriggerVerbs: new Set(['click', 'submit', 'press']),
+    requiresSameSurface: true,
+  },
+  adf_ppr: {
+    maxWindowMs: 3000,
+    validTriggerVerbs: new Set(['selectOption', 'change', 'input', 'click']),
+    requiresSameSurface: true,
+  },
+};
 
 export class EffectCorrelator {
   /**
    * @param {Object} [options]
-   * @param {number} [options.correlationWindowMs=5000]
    */
   constructor(options = {}) {
-    this.correlationWindowMs = options.correlationWindowMs || 5000;
     this._recentActions = [];
     this._pendingEffects = [];
+    this._maxGlobalWindowMs = 6000;
   }
 
   /**
@@ -29,30 +58,64 @@ export class EffectCorrelator {
     this._cleanOld(now);
     this._recentActions.push({
       action,
-      timestamp: now,
+      timestamp: action.timestamp || now,
     });
   }
 
   /**
-   * Correlate an observed browser effect to the most recent relevant user action.
-   * @param {Object} effect Observed effect (popup, navigation, download)
+   * Correlate an observed browser effect to the most recent compatible user action.
+   *
+   * Uses domain-specific matching rules:
+   * - Popup: checks opener surface ID and click/submit verbs.
+   * - Navigation: checks same surface ID and navigation-inducing action verbs.
+   * - Download: checks same surface ID and trigger verbs.
+   *
+   * @param {Object} effect Observed effect (popup, navigation, download, dialog)
    * @returns {Object|null} Correlated action or null
    */
   correlateEffect(effect) {
-    const now = Date.now();
+    const now = effect.timestamp || Date.now();
     this._cleanOld(now);
 
-    // Search backwards for the most recent compatible action
+    const rule = CORRELATION_RULES[effect.kind] || {
+      maxWindowMs: 4000,
+      validTriggerVerbs: null,
+      requiresSameSurface: false,
+    };
+
+    // Search backwards for the most recent valid initiating action
     for (let i = this._recentActions.length - 1; i >= 0; i--) {
       const candidate = this._recentActions[i];
-      if (now - candidate.timestamp <= this.correlationWindowMs) {
-        // If surface matches or effect was spawned by this surface
-        if (!effect.surfaceId || candidate.action.surfaceId === effect.surfaceId || candidate.action.surfaceId === effect.openerSurfaceId) {
-          candidate.action.effects = candidate.action.effects || [];
-          candidate.action.effects.push(effect);
-          return candidate.action;
+      const delta = now - candidate.timestamp;
+
+      if (delta < 0 || delta > rule.maxWindowMs) {
+        continue;
+      }
+
+      const action = candidate.action;
+      const actionType = action.type || action.action || '';
+
+      // Verb check
+      if (rule.validTriggerVerbs && !rule.validTriggerVerbs.has(actionType)) {
+        continue;
+      }
+
+      // Surface provenance check
+      if (rule.requiresOpenerMatch) {
+        if (effect.openerSurfaceId && action.surfaceId && action.surfaceId !== effect.openerSurfaceId) {
+          continue;
+        }
+      } else if (rule.requiresSameSurface) {
+        if (effect.surfaceId && action.surfaceId && action.surfaceId !== effect.surfaceId) {
+          continue;
         }
       }
+
+      // Correlate effect to action
+      action.effects = action.effects || [];
+      action.effects.push(effect);
+      effect.correlatedActionId = action.id || `${action.type}_${action.timestamp}`;
+      return action;
     }
 
     this._pendingEffects.push({ effect, timestamp: now });
@@ -60,8 +123,8 @@ export class EffectCorrelator {
   }
 
   _cleanOld(now) {
-    this._recentActions = this._recentActions.filter((a) => (now - a.timestamp) <= this.correlationWindowMs);
-    this._pendingEffects = this._pendingEffects.filter((e) => (now - e.timestamp) <= this.correlationWindowMs);
+    this._recentActions = this._recentActions.filter((a) => (now - a.timestamp) <= this._maxGlobalWindowMs);
+    this._pendingEffects = this._pendingEffects.filter((e) => (now - e.timestamp) <= this._maxGlobalWindowMs);
   }
 
   clear() {

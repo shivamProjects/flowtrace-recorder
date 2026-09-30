@@ -6,6 +6,7 @@
  *
  * Each Surface maintains:
  * - surfaceId: unique stable identifier within the recording session
+ * - sessionId: parent recording session ID
  * - tabId: Chrome tab ID
  * - windowId: Chrome window ID
  * - openerSurfaceId: surface that spawned this popup (if any)
@@ -18,11 +19,13 @@
 export class SurfaceRegistry {
   /**
    * @param {Object} [options]
+   * @param {string} [options.sessionId]
    * @param {Function} [options.onSurfaceAdded]
    * @param {Function} [options.onSurfaceRemoved]
    * @param {Function} [options.onSurfaceUpdated]
    */
   constructor(options = {}) {
+    this.sessionId = options.sessionId || 'default';
     this.onSurfaceAdded = options.onSurfaceAdded || (() => {});
     this.onSurfaceRemoved = options.onSurfaceRemoved || (() => {});
     this.onSurfaceUpdated = options.onSurfaceUpdated || (() => {});
@@ -32,6 +35,23 @@ export class SurfaceRegistry {
     /** @type {Map<number, string>} tabId -> surfaceId */
     this._tabToSurface = new Map();
     this._nextSurfaceIndex = 1;
+  }
+
+  /**
+   * Derive a clean namespace prefix for this session.
+   * @private
+   */
+  _prefix() {
+    const clean = String(this.sessionId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+    return `surf_${clean.slice(-8)}`;
+  }
+
+  /**
+   * Set or update the active recording session ID.
+   * @param {string} sessionId
+   */
+  setSessionId(sessionId) {
+    this.sessionId = sessionId || 'default';
   }
 
   /**
@@ -51,9 +71,10 @@ export class SurfaceRegistry {
       return surface;
     }
 
-    const surfaceId = `surface_main_${tabId}`;
+    const surfaceId = `${this._prefix()}_main_${tabId}`;
     const surface = {
       surfaceId,
+      sessionId: this.sessionId,
       tabId,
       windowId: details.windowId || null,
       openerSurfaceId: null,
@@ -84,10 +105,11 @@ export class SurfaceRegistry {
 
     const openerSurfaceId = openerTabId ? this._tabToSurface.get(openerTabId) || null : null;
     const surfaceIndex = this._nextSurfaceIndex++;
-    const surfaceId = `surface_popup_${surfaceIndex}_${tabId}`;
+    const surfaceId = `${this._prefix()}_popup_${surfaceIndex}_${tabId}`;
 
     const surface = {
       surfaceId,
+      sessionId: this.sessionId,
       tabId,
       windowId: details.windowId || null,
       openerSurfaceId,
@@ -189,6 +211,7 @@ export class SurfaceRegistry {
    */
   toJSON() {
     return {
+      sessionId: this.sessionId,
       surfaces: Array.from(this._surfaces.entries()),
       tabToSurface: Array.from(this._tabToSurface.entries()),
       nextSurfaceIndex: this._nextSurfaceIndex,
@@ -202,6 +225,9 @@ export class SurfaceRegistry {
   fromJSON(json) {
     if (!json) return;
     this.clear();
+    if (json.sessionId) {
+      this.sessionId = json.sessionId;
+    }
     if (Array.isArray(json.surfaces)) {
       this._surfaces = new Map(json.surfaces);
     }

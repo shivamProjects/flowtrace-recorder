@@ -9,13 +9,17 @@
  */
 
 import { DEFAULT_PATCH_ID } from '../shared/patch-api.js';
+import { SurfaceRegistry } from './surface-registry.js';
+import { EffectCorrelator, LifecycleObservers } from './observers.js';
 
 const STORAGE_KEY = 'recorderSession';
 const PREFERENCE_KEY = 'preferredPatchId';
 
 /** @returns {Object} a fresh session */
 export function blankSession(patchId = DEFAULT_PATCH_ID) {
+  const recordingSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   return {
+    recordingSessionId,
     isRecording: false,
     isPaused: false,
     activeTabId: null,
@@ -27,6 +31,8 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
     generatedCode: '',
     steps: [],
     actions: [],
+    surfaces: [],
+    surfaceState: null,
     /**
      * Free-form bag the active patch streams into during recording and reads
      * in postProcess. The core never inspects its contents — it only merges.
@@ -38,12 +44,47 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
 let session = blankSession();
 let loaded = false;
 
+const surfaceRegistry = new SurfaceRegistry({ sessionId: session.recordingSessionId });
+const effectCorrelator = new EffectCorrelator();
+let lifecycleObservers = null;
+
+export function getSurfaceRegistry() {
+  return surfaceRegistry;
+}
+
+export function getEffectCorrelator() {
+  return effectCorrelator;
+}
+
+export function getLifecycleObservers() {
+  return lifecycleObservers;
+}
+
+export function initLifecycleObservers(injectFn) {
+  if (!lifecycleObservers) {
+    lifecycleObservers = new LifecycleObservers({
+      surfaceRegistry,
+      correlator: effectCorrelator,
+      onEffectCaptured: (_effect) => {
+        session.surfaces = surfaceRegistry.getAll();
+        session.surfaceState = surfaceRegistry.toJSON();
+        persistSoon();
+      },
+      injectContentScript: injectFn,
+    });
+  }
+  return lifecycleObservers;
+}
+
 export function get() {
   return session;
 }
 
 export function set(next) {
   session = next;
+  if (next.recordingSessionId) {
+    surfaceRegistry.setSessionId(next.recordingSessionId);
+  }
 }
 
 export async function ensureLoaded() {
@@ -54,6 +95,12 @@ export async function ensureLoaded() {
     if (stored[STORAGE_KEY]) {
       session = { ...blankSession(), ...stored[STORAGE_KEY] };
       session.patchContext = stored[STORAGE_KEY].patchContext || {};
+      if (session.recordingSessionId) {
+        surfaceRegistry.setSessionId(session.recordingSessionId);
+      }
+      if (session.surfaceState) {
+        surfaceRegistry.fromJSON(session.surfaceState);
+      }
     }
     if (!session.isRecording && stored[PREFERENCE_KEY]) {
       session.patchId = stored[PREFERENCE_KEY];
@@ -65,6 +112,8 @@ export async function ensureLoaded() {
 
 export async function persist() {
   try {
+    session.surfaceState = surfaceRegistry.toJSON();
+    session.surfaces = surfaceRegistry.getAll();
     await chrome.storage.local.set({ [STORAGE_KEY]: session });
   } catch (err) {
     console.warn('[recorder] could not persist session:', err.message);

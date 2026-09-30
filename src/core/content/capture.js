@@ -17,6 +17,8 @@ import { cleanLabel, cleanText, isVisible, resolveLabel, retargetToInteractive, 
 import { buildLocatorObject } from './locator-object.js';
 import { generateSelector } from './selector.js';
 import { frameInfo } from './frames.js';
+import { GeometryCapture } from '../evidence/geometry.js';
+import { FileCapture } from '../bridge/file-capture.js';
 import { isWidgetNode } from './widget.js';
 import { detectRequired } from './required.js';
 import * as bus from './bus.js';
@@ -27,6 +29,8 @@ const CHECKBOX_REEMIT_MS = 500;
 let patch = null;
 let ctx = null;
 let listeners = [];
+let fileCapture = null;
+const geometryCapture = new GeometryCapture();
 const fillTimers = new Map();
 const lastCheckboxEmit = new WeakMap();
 
@@ -40,6 +44,23 @@ export function startCapture(activePatch) {
 
   safeInvoke(`${patch.id}.start`, patch.capture.start, undefined, ctx);
 
+  // Install detached file upload interceptor
+  fileCapture = new FileCapture({
+    onFileSelected: (uploadEvent) => {
+      const initiator = uploadEvent.initiator || (document.body ? document.body : null);
+      const ev = makeEvent('upload', initiator, {
+        files: uploadEvent.files,
+        value: uploadEvent.files.map((f) => f.name).join(', '),
+        meta: {
+          isDetached: uploadEvent.isDetached,
+          fileCount: uploadEvent.fileCount,
+        },
+      });
+      ctx.emit(ev);
+    },
+  });
+  fileCapture.install();
+
   on(document, 'click', onClick, true);
   on(document, 'input', onInput, true);
   on(document, 'change', onChange, true);
@@ -51,6 +72,10 @@ export function stopCapture() {
   let snapshot = {};
   if (patch && ctx) {
     snapshot = safeInvoke(`${patch.id}.stop`, patch.capture.stop, {}, ctx) || {};
+  }
+  if (fileCapture) {
+    fileCapture.uninstall();
+    fileCapture = null;
   }
   for (const off of listeners) off();
   listeners = [];
@@ -113,6 +138,8 @@ export function makeEvent(type, el, extra = {}) {
     ? buildLocatorObject(el, { resolveLabel: labelResolver, selector, meta })
     : null;
 
+  const geometry = el ? geometryCapture.capture(el) : null;
+
   return {
     type,
     timestamp: Date.now(),
@@ -121,6 +148,7 @@ export function makeEvent(type, el, extra = {}) {
     selector: selector.selector,
     locator: selector.locator,
     locatorObject,
+    geometry,
     tagName: el ? el.tagName.toLowerCase() : null,
     inputType: el && el.tagName === 'INPUT' ? (el.getAttribute('type') || 'text') : null,
     value: null,
@@ -197,6 +225,8 @@ function onClick(e) {
   // Flush any pending debounced fills so that a fill preceding this click is
   // emitted BEFORE the click, preserving chronological user interaction order.
   flushPendingFills(target);
+
+  if (fileCapture) fileCapture.recordInitiator(target);
 
   // The patch gets first refusal. Returning true means it has already emitted
   // something more accurate than a generic click — an LOV row selection, a date

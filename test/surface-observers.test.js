@@ -15,7 +15,7 @@ describe('SurfaceRegistry', () => {
 
   it('registers and retrieves a primary surface', () => {
     const surface = registry.registerPrimary(101, { url: 'https://example.com/app', windowId: 1 });
-    expect(surface.surfaceId).toBe('surface_main_101');
+    expect(surface.surfaceId).toMatch(/^surf_.*_main_101$/);
     expect(surface.tabId).toBe(101);
     expect(surface.kind).toBe('page');
     expect(surface.url).toBe('https://example.com/app');
@@ -54,7 +54,7 @@ describe('SurfaceRegistry', () => {
   });
 
   it('serializes and deserializes snapshot across worker restart', () => {
-    registry.registerPrimary(101, { url: 'https://example.com/main' });
+    const main = registry.registerPrimary(101, { url: 'https://example.com/main' });
     registry.registerPopup(102, 101, { url: 'https://example.com/popup' });
 
     const snapshot = registry.toJSON();
@@ -64,7 +64,7 @@ describe('SurfaceRegistry', () => {
 
     expect(restored.hasTab(101)).toBe(true);
     expect(restored.hasTab(102)).toBe(true);
-    expect(restored.getByTabId(102).openerSurfaceId).toBe('surface_main_101');
+    expect(restored.getByTabId(102).openerSurfaceId).toBe(main.surfaceId);
   });
 });
 

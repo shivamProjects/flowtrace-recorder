@@ -96,26 +96,35 @@ export function createRouter(patches) {
     RECORD_EVENT: async (msg, sender) => {
       const s = session.get();
       if (!s.isRecording || s.isPaused) return { accepted: false };
-      if (sender.tab && sender.tab.id !== s.activeTabId) return { accepted: false };
+
+      const surfaceRegistry = session.getSurfaceRegistry();
+      const tabId = sender.tab ? sender.tab.id : s.activeTabId;
+
+      // Allow events from primary tab or any registered popup surface
+      if (sender.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+        return { accepted: false, reason: 'unrecognized_surface' };
+      }
 
       if (!shouldAccept(msg.event, s.events)) {
         return { accepted: false, reason: 'deduplicated' };
       }
+
+      // Tag surface identity onto event
+      const surface = tabId ? surfaceRegistry.getByTabId(tabId) : null;
+      if (surface) {
+        msg.event.surfaceId = surface.surfaceId;
+      }
+
+      // Record for asynchronous effect correlation (popups, navigations, downloads)
+      session.getEffectCorrelator().recordAction(msg.event);
+
       // The content script masks credentials before sending, so this should
       // always be a no-op. It runs anyway because this is the boundary where an
       // event first becomes something that gets persisted to disk — the cheapest
       // possible check stands between a bug upstream and a stored password.
       s.events.push(maskEvent(msg.event));
-      // EVERY event is persisted. This used to write only every 5th one, so an
-      // MV3 worker eviction silently lost up to four captured interactions and
-      // the restored session carried no sign that anything was missing.
-      //
-      // persistSoon() coalesces rather than defers selectively: a burst of
-      // interactions collapses into one write, so the storage cost that
-      // motivated the batching is still avoided, but no event is ever outside
-      // the write that covers it.
       session.persistSoon();
-      return { accepted: true, totalEvents: s.events.length };
+      return { accepted: true, totalEvents: s.events.length, surfaceId: msg.event.surfaceId };
     },
 
     PATCH_CONTEXT_UPDATE: (msg, sender) => {
@@ -233,8 +242,19 @@ async function startRecording(msg, patches) {
   next.startedAt = Date.now();
   next.sourceUrl = msg.tabUrl || null;
 
+  // Initialize surface registry with primary root surface
+  const surfaceRegistry = session.getSurfaceRegistry();
+  surfaceRegistry.clear();
+  surfaceRegistry.setSessionId(next.recordingSessionId);
+  surfaceRegistry.registerPrimary(msg.tabId, { url: msg.tabUrl });
+
+  // Start zero-CDP lifecycle observers (popups, navigations, downloads)
+  session.initLifecycleObservers(inject).start();
+
   if (msg.tabUrl && !msg.tabUrl.startsWith('chrome://') && msg.tabUrl !== 'about:blank') {
-    next.events.push(makeNavigateEvent(msg.tabUrl));
+    const navEvent = makeNavigateEvent(msg.tabUrl);
+    navEvent.surfaceId = surfaceRegistry.getByTabId(msg.tabId)?.surfaceId;
+    next.events.push(navEvent);
   }
   session.set(next);
   await session.persist();
@@ -392,6 +412,9 @@ async function stopRecording(patches) {
   if (!s.isRecording) return { success: false, error: 'No active recording.' };
 
   s.isRecording = false;
+
+  // Stop zero-CDP lifecycle observers
+  session.getLifecycleObservers()?.stop();
 
   if (s.activeTabId) {
     await broadcast(s.activeTabId, '__flowtrace_deactivate__');
