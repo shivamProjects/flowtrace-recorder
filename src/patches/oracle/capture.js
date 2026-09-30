@@ -17,6 +17,9 @@ import { cleanText, normaliseFieldName } from '../../core/content/dom.js';
 import { detectRequired } from '../../core/content/required.js';
 import { resolveAdfLabel } from './labels.js';
 import {
+  resolveRedwoodHost, getRedwoodLabel, extractRedwoodOptionData,
+} from './redwood.js';
+import {
   CHOICE_OPTION, COMMIT_BUTTON, COMMIT_TEXT, DATE_HEADERS, DATE_PICKER, DIALOG,
   FIELD_CONTAINER, JET_SELECT_HOST, LOV_POPUP, LOV_TRIGGER, NAV_TILE,
   NAV_TILE_CHILD,
@@ -276,30 +279,25 @@ function claimChoiceListOption(target, ctx) {
   const optionText = option.textContent.trim();
   if (!optionText) return false;
 
-  // ── Oracle JET oj-select-single / oj-combobox-one ────────────────────────
-  // JET renders the dropdown in a popup detached from the host element. Walk
-  // the event's composed path to find the host, or fall back to document query.
-  const jetHost = (() => {
-    // 1. Direct ancestor (when popup is rendered inside shadow DOM of host)
-    const direct = target.closest ? target.closest(JET_SELECT_HOST) : null;
-    if (direct) return direct;
-    // 2. Find the currently open JET select that has focus
-    return document.querySelector(`${JET_SELECT_HOST}[open], ${JET_SELECT_HOST}[aria-expanded="true"]`);
-  })();
+  // ── Oracle Redwood & JET Components ────────────────────────────────────
+  // Redwood renders dropdowns in a floating popup detached from the host element.
+  // Resolve host via ancestor walk, trigger correlation, container attrs, or active state query.
+  const jetHost = resolveRedwoodHost(option, state.lastTrigger, state.lastTriggerAt, TRIGGER_MEMORY_MS);
 
   if (jetHost) {
-    const hostLabel = resolveAdfLabel(jetHost) ||
-      jetHost.getAttribute('aria-label') ||
-      jetHost.getAttribute('label') ||
-      jetHost.getAttribute('label-hint') ||
-      jetHost.id || '';
+    const { label: parsedOptionLabel, value: optionValue } = extractRedwoodOptionData(option);
+    const resolvedLabel = parsedOptionLabel || optionText;
+    const hostLabel = getRedwoodLabel(jetHost) || resolveAdfLabel(jetHost) || jetHost.id || '';
 
     ctx.emit(ctx.makeEvent('selectOption', jetHost, {
-      value: optionText,
+      value: resolvedLabel,
       meta: {
-        optionLabel: optionText,
+        framework: 'oracle-redwood',
+        optionLabel: resolvedLabel,
+        optionValue,
         selectByClick: true,
         jetHost: jetHost.tagName.toLowerCase(),
+        hostLabel,
         triggerSelector: ctx.selectorFor(jetHost).selector,
       },
     }));

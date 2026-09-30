@@ -27,20 +27,25 @@ export const DATE_HEADERS = [
   '[class*="header"] span', 'th[colspan]', '.x11d', '.x11e', 'table span[id]',
 ];
 
-/** Choice-list options rendered by af:selectOneChoice or Oracle JET oj-select-single. */
+/** Choice-list options rendered by af:selectOneChoice or Oracle JET / Redwood oj-c-select-single. */
 export const CHOICE_OPTION =
-  '[role="option"], .af_selectOneChoice-item, [id*="selectOneChoice"] li';
+  '[role="option"], oj-option, .af_selectOneChoice-item, [id*="selectOneChoice"] li, ' +
+  '.oj-listbox-result, .oj-c-select-single-item, .oj-listview-item, [data-oj-vcomponent="oj-c-select-single-item"], ' +
+  '[class*="oj-listbox-result"], [class*="oj-select-item"]';
 
 /**
- * Oracle JET combobox/select host custom elements.
- * A click on an [role="option"] inside one of these is a selectOption action.
+ * Oracle JET / Redwood combobox/select host custom elements.
+ * A click on an option inside or attached to one of these is a selectOption action.
  */
-export const JET_SELECT_HOST = 'oj-select-single, oj-combobox-one, oj-select-many';
+export const JET_SELECT_HOST =
+  'oj-c-select-single, oj-select-single, oj-c-select-multiple, oj-select-many, ' +
+  'oj-c-combobox-one, oj-combobox-one, oj-combobox-many, oj-c-radioset, oj-c-checkboxset';
 
 /** Anything that can open a list of values or a picker dialog. */
 export const LOV_TRIGGER =
   'input, select, [role="combobox"], [class*="selectOneChoice"], ' +
-  '[id*="lovIcon"], [class*="Lov"]';
+  'oj-c-select-single, oj-select-single, oj-c-combobox-one, oj-combobox-one, ' +
+  '[id*="lovIcon"], [class*="Lov"], [class*="oj-select-arrow"], [class*="oj-c-select-arrow"]';
 
 /** Wrappers used when walking from a picker icon to the field it fills. */
 export const FIELD_CONTAINER =
