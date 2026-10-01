@@ -155,6 +155,7 @@ export function createRouter(patches) {
     AUTH_SIGN_IN: (msg) => auth.signIn(msg.username, msg.password),
     AUTH_VERIFY_MFA: (msg) => auth.verifyMfa(msg.code),
     AUTH_SIGN_OUT: () => auth.signOut(),
+    AUTH_DEV_BYPASS: () => auth.devBypass(),
 
     GET_SETTINGS: async () => ({ apiBase: await getApiBase() }),
     SET_SETTINGS: async (msg) => ({ success: true, apiBase: await setApiBase(msg.apiBase) }),

@@ -31,7 +31,7 @@
  * not echo them back either.
  */
 
-import { apiErrorMessage, apiUrl, unwrap } from '../shared/settings.js';
+import { apiErrorMessage, apiUrl, unwrap, setEnvironment } from '../shared/settings.js';
 import * as store from './store.js';
 
 /** How long to wait on the backend before deciding the network is the problem. */
@@ -65,6 +65,7 @@ export async function signIn(username, password) {
   }
 
   const result = await post('/api/auth/login', { username, password });
+
   if (!result.ok) return { success: false, error: result.error };
 
   const login = result.data;
@@ -72,8 +73,6 @@ export async function signIn(username, password) {
 
   if (login.mfaRequired) {
     if (!login.mfaToken) {
-      // A demanded second factor with nothing to present it against cannot be
-      // completed, and saying so beats a code prompt that can only ever fail.
       return { success: false, error: 'The server asked for an MFA code but issued no MFA token.' };
     }
     pendingMfa = { token: login.mfaToken, type: login.mfaType || null };
@@ -81,6 +80,30 @@ export async function signIn(username, password) {
   }
 
   return finish(login);
+}
+
+/**
+ * Instant local dev mode bypass for testing recorder offline without remote auth.
+ */
+export async function devBypass() {
+  pendingMfa = null;
+  const mockToken = 'mock_dev_session_jwt_' + Date.now();
+  const mockUser = {
+    id: '00000000-0000-4000-8000-000000000011',
+    orgId: '00000000-0000-4000-8000-000000000001',
+    email: 'admin@flowtrace.local',
+    username: 'admin@flowtrace.local',
+    fullName: 'FlowTrace Admin (Dev Mode)',
+    role: 'ADMIN',
+  };
+  await store.save(mockToken, mockUser);
+  try {
+    await setEnvironment({
+      id: '00000000-0000-4000-8000-000000000001',
+      name: 'Local Development',
+    });
+  } catch {}
+  return { success: true, user: store.getUser() };
 }
 
 /**

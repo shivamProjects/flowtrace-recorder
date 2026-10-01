@@ -55,6 +55,8 @@
   const authPassword = document.getElementById('auth-password');
   const authError   = document.getElementById('auth-error');
   const btnSignIn   = document.getElementById('btn-sign-in');
+  const btnQuickDevLogin = document.getElementById('btn-quick-dev-login');
+  const btnDevBypass = document.getElementById('btn-dev-bypass');
   const mfaForm     = document.getElementById('mfa-form');
   const mfaCode     = document.getElementById('mfa-code');
   const mfaHint     = document.getElementById('mfa-hint');
@@ -149,12 +151,15 @@
   function showAuthenticated(authenticated, user) {
     authScreen.classList.toggle('hidden', authenticated);
     appBody.classList.toggle('hidden', !authenticated);
-    headerMode.textContent = authenticated ? headerMode.textContent : 'Signed out';
+    if (btnSignOut) btnSignOut.style.display = authenticated ? 'flex' : 'none';
+    headerMode.textContent = authenticated ? (user ? `Connected (${displayName(user)})` : 'Connected') : 'Signed out';
     if (authenticated) {
       showMfaStep(false);
       // UserInfo carries fullName and username; email may be absent entirely.
-      authUser.textContent = displayName(user);
-      authUser.title = (user && (user.email || user.username)) || '';
+      if (authUser) {
+        authUser.textContent = displayName(user);
+        authUser.title = (user && (user.email || user.username)) || '';
+      }
       authPassword.value = '';
       mfaCode.value = '';
       authError.textContent = '';
@@ -208,6 +213,29 @@
       authError.textContent = (resp && resp.error) || 'Sign-in failed.';
     }
   });
+
+  if (btnQuickDevLogin) {
+    btnQuickDevLogin.addEventListener('click', () => {
+      authUsername.value = 'admin@flowtrace.local';
+      authPassword.value = 'password123';
+      authForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
+  }
+
+  if (btnDevBypass) {
+    btnDevBypass.addEventListener('click', async () => {
+      btnDevBypass.disabled = true;
+      btnDevBypass.textContent = 'Bypassing…';
+      const resp = await sendBg({ action: 'AUTH_DEV_BYPASS' });
+      btnDevBypass.disabled = false;
+      btnDevBypass.textContent = '🚀 Bypass Auth';
+      if (resp && resp.success) {
+        await onSignedIn(resp.user);
+      } else {
+        authError.textContent = (resp && resp.error) || 'Dev bypass failed.';
+      }
+    });
+  }
 
   mfaForm.addEventListener('submit', async (e) => {
     e.preventDefault();

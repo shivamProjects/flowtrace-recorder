@@ -22,12 +22,10 @@ const API_BASE_KEY = 'apiBase';
 const ENVIRONMENT_KEY = 'environment';
 
 /**
- * Default target — the shared dev platform on `nitro`, verified live:
- * `GET http://nitro:3050/api/health` returns `{"database":"CONNECTED","status":"UP"}`.
- * The Spring server listens on 3050 with no context path, so paths are literal.
+ * Default target — the FlowTrace Cockpit server on localhost:3200.
  * Override per install from the popup's settings field.
  */
-export const DEFAULT_API_BASE = 'http://nitro:3050';
+export const DEFAULT_API_BASE = 'http://localhost:3050';
 
 export async function getApiBase() {
   try {
@@ -59,7 +57,10 @@ export async function getEnvironment() {
   try {
     const stored = await chrome.storage.local.get(ENVIRONMENT_KEY);
     const env = stored[ENVIRONMENT_KEY];
-    return env && isUuid(env.id) ? { id: env.id, name: env.name || env.id } : null;
+    if (env && isUuid(env.id)) {
+      return { id: env.id, name: env.name || env.id };
+    }
+    return null;
   } catch {
     return null;
   }
