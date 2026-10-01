@@ -15,15 +15,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TargetResolver, resolveInteractiveTarget } from '../src/core/capture/targeting/target-resolver.js';
-import { takeTargetSnapshot } from '../src/core/capture/targeting/target-snapshot.js';
-import { ClickCorrelator } from '../src/core/capture/pointer/click-correlator.js';
-import { classifyKey } from '../src/core/capture/keyboard/key-classifier.js';
-import { KeyboardCapture } from '../src/core/capture/keyboard/keyboard-capture.js';
-import { FocusState } from '../src/core/capture/focus/focus-state.js';
-import { NativeSelectCapture } from '../src/core/capture/input/native-select.js';
-import { ContentEditableCapture, resolveContentEditableRoot, extractContentEditableText } from '../src/core/capture/input/contenteditable.js';
-import { RangeCapture } from '../src/core/capture/input/range.js';
+import {
+  TargetResolver,
+  resolveInteractiveTarget,
+  takeTargetSnapshot,
+  ClickCorrelator,
+  classifyKey,
+  KeyboardCapture,
+  FocusState,
+  NativeSelectCapture,
+  ContentEditableCapture,
+  resolveContentEditableRoot,
+  extractContentEditableText,
+  RangeCapture,
+} from '@flowtrace/recorder-core';
 
 describe('RecordActionTool Forensic Extraction Characterization Suite', () => {
   beforeEach(() => {

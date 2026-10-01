@@ -68,11 +68,15 @@ export function classifyKey(event, target) {
 
   const isCtrlOrMeta = event.ctrlKey || event.metaKey;
   const tag = target && target.tagName ? target.tagName.toUpperCase() : '';
+  const role = target && target.getAttribute ? (target.getAttribute('role') || '').toLowerCase() : '';
   const inputType = target && target.getAttribute ? (target.getAttribute('type') || '').toLowerCase() : '';
   const isContentEditable = target && target.isContentEditable;
 
   // 2. Space key on checkbox/radio toggles the check state
-  if ((key === ' ' || key === 'Spacebar' || key === 'Space') && tag === 'INPUT' && (inputType === 'checkbox' || inputType === 'radio')) {
+  if (
+    (key === ' ' || key === 'Spacebar' || key === 'Space') &&
+    ((tag === 'INPUT' && (inputType === 'checkbox' || inputType === 'radio')) || role === 'checkbox' || role === 'radio')
+  ) {
     return { type: 'check' };
   }
 
@@ -137,10 +141,11 @@ export function classifyKey(event, target) {
  * @returns {Object}
  */
 export function extractModifiers(event) {
-  return {
-    control: !!event.ctrlKey,
-    alt: !!event.altKey,
-    shift: !!event.shiftKey,
-    meta: !!event.metaKey,
-  };
+  if (!event) return undefined;
+  const mods = {};
+  if (event.ctrlKey) mods.control = true;
+  if (event.altKey) mods.alt = true;
+  if (event.shiftKey) mods.shift = true;
+  if (event.metaKey) mods.meta = true;
+  return Object.keys(mods).length > 0 ? mods : undefined;
 }

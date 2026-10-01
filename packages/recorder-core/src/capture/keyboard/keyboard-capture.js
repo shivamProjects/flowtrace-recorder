@@ -7,6 +7,7 @@
 
 import { classifyKey } from './key-classifier.js';
 import { isWidgetNode } from '../../content/widget.js';
+import { isRecordableEvent } from '../provenance/event-provenance.js';
 
 export class KeyboardCapture {
   /**
@@ -29,6 +30,8 @@ export class KeyboardCapture {
    */
   onKeyDown(event) {
     if (!this._isRecording()) return;
+    if (!isRecordableEvent(event)) return;
+
     const target = event.target;
     if (!target || !(target instanceof Element)) return;
     if (isWidgetNode(target)) return;
@@ -47,12 +50,18 @@ export class KeyboardCapture {
 
     if (classification.type === 'check') {
       this._flushPendingFills(target);
-      const isChecked = 'checked' in target ? !target.checked : true;
-      const ev = this._makeEvent('check', target, {
-        checked: isChecked,
-        meta: { source: 'keyboard-space' },
-      });
-      this._emit(ev);
+      // For native input checkboxes/radios, the browser will synthesize native click/change events
+      // upon key release, which capture.js captures with the updated checked state.
+      // Emitting here would race with the native event and invert state.
+      const isNativeInput = target.tagName === 'INPUT' && (target.type === 'checkbox' || target.type === 'radio');
+      if (!isNativeInput) {
+        const isChecked = target.getAttribute?.('aria-checked') !== 'true';
+        const ev = this._makeEvent('check', target, {
+          checked: isChecked,
+          meta: { source: 'keyboard-space' },
+        });
+        this._emit(ev);
+      }
       return;
     }
 

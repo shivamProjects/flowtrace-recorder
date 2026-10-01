@@ -91,7 +91,7 @@ export class FocusState {
    * @returns {Element|null}
    */
   getActiveElement() {
-    return this._activeElement || (typeof document !== 'undefined' ? document.activeElement : null);
+    return this._activeElement || null;
   }
 
   /**

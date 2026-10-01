@@ -117,6 +117,7 @@ export class NativeSelectCapture {
         optionLabel,
         optionValue: option.value,
         selectedIndex: select.selectedIndex,
+        sameValueSelect: true,
         isSameValueReSelection: true,
       },
     });

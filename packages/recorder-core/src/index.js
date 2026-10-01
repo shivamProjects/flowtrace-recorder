@@ -14,6 +14,7 @@ export * from './capture/input/contenteditable.js';
 export * from './capture/input/range.js';
 export * from './capture/targeting/target-snapshot.js';
 export * from './capture/targeting/target-resolver.js';
+export * from './capture/provenance/event-provenance.js';
 
 export * from './content/selector.js';
 export * from './content/locator-object.js';

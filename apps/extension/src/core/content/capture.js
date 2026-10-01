@@ -23,13 +23,16 @@ import { isWidgetNode } from './widget.js';
 import { detectRequired } from './required.js';
 import * as bus from './bus.js';
 
-import { resolveInteractiveTarget } from '../capture/targeting/target-resolver.js';
-import { ClickCorrelator } from '../capture/pointer/click-correlator.js';
-import { KeyboardCapture } from '../capture/keyboard/keyboard-capture.js';
-import { FocusState } from '../capture/focus/focus-state.js';
-import { NativeSelectCapture } from '../capture/input/native-select.js';
-import { ContentEditableCapture } from '../capture/input/contenteditable.js';
-import { RangeCapture } from '../capture/input/range.js';
+import {
+  resolveInteractiveTarget,
+  ClickCorrelator,
+  KeyboardCapture,
+  FocusState,
+  NativeSelectCapture,
+  ContentEditableCapture,
+  RangeCapture,
+  isRecordableEvent,
+} from '@flowtrace/recorder-core';
 
 const FILL_DEBOUNCE_MS = 600;
 const CHECKBOX_REEMIT_MS = 500;
@@ -112,6 +115,7 @@ export function startCapture(activePatch) {
 
   on(document, 'click', onClick, true);
   on(document, 'dblclick', onDoubleClick, true);
+  on(document, 'auxclick', onAuxClick, true);
   on(document, 'contextmenu', onContextMenu, true);
   on(document, 'keydown', onKeyDown, true);
   on(document, 'focusin', onFocusIn, true);
@@ -326,6 +330,7 @@ function evaluateAdapterObservation(type, target, event) {
 
 function onClick(e) {
   if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
   const target = resolveInteractiveTarget(e) || e.target;
   if (!target || !target.closest) return;
   if (isWidgetNode(target)) return;
@@ -381,6 +386,7 @@ function onClick(e) {
 
 function onDoubleClick(e) {
   if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
   const target = resolveInteractiveTarget(e) || e.target;
   if (!target || !target.closest) return;
   if (isWidgetNode(target)) return;
@@ -412,8 +418,26 @@ function onDoubleClick(e) {
   }
 }
 
+function onAuxClick(e) {
+  if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
+  // Middle click (button 1)
+  if (e.button === 1) {
+    const target = resolveInteractiveTarget(e) || e.target;
+    if (!target || !target.closest) return;
+    if (isWidgetNode(target)) return;
+
+    flushPendingFills(target);
+
+    const interactive = retargetToInteractive(target);
+    const el = interactive || target;
+    send(makeEvent('click', el, { button: 'middle', clickCount: 1 }));
+  }
+}
+
 function onContextMenu(e) {
   if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
   const target = resolveInteractiveTarget(e) || e.target;
   if (!target || !target.closest) return;
   if (isWidgetNode(target)) return;
@@ -466,6 +490,7 @@ function onFocusOut(e) {
 
 function onInput(e) {
   if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
   const target = e.target;
   if (!target) return;
 
@@ -513,6 +538,7 @@ function onInput(e) {
 
 function onChange(e) {
   if (!bus.isRecording()) return;
+  if (!isRecordableEvent(e)) return;
   const target = e.target;
   if (!target) return;
 

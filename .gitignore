@@ -3,4 +3,5 @@ dist/
 *.log
 .test-desktop-storage/
 .work-e2e/
+.workflowstudio/
 
