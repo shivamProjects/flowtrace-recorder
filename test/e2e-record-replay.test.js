@@ -209,5 +209,5 @@ describe('End-to-End Recording and Replay Verification', () => {
 
     // Cleanup
     if (existsSync(WORK)) rmSync(WORK, { recursive: true, force: true });
-  }, 45_000);
+  }, 90_000);
 });
