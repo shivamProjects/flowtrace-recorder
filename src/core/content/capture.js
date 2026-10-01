@@ -27,6 +27,9 @@ import { resolveInteractiveTarget } from '../capture/targeting/target-resolver.j
 import { ClickCorrelator } from '../capture/pointer/click-correlator.js';
 import { KeyboardCapture } from '../capture/keyboard/keyboard-capture.js';
 import { FocusState } from '../capture/focus/focus-state.js';
+import { NativeSelectCapture } from '../capture/input/native-select.js';
+import { ContentEditableCapture } from '../capture/input/contenteditable.js';
+import { RangeCapture } from '../capture/input/range.js';
 
 const FILL_DEBOUNCE_MS = 600;
 const CHECKBOX_REEMIT_MS = 500;
@@ -38,6 +41,9 @@ let fileCapture = null;
 let clickCorrelator = null;
 let keyboardCapture = null;
 let focusState = null;
+let nativeSelectCapture = null;
+let contentEditableCapture = null;
+let rangeCapture = null;
 const geometryCapture = new GeometryCapture();
 const fillTimers = new Map();
 const lastCheckboxEmit = new WeakMap();
@@ -66,6 +72,25 @@ export function startCapture(activePatch) {
 
   focusState = new FocusState({
     flushPendingFills: (exclude) => flushPendingFills(exclude),
+  });
+
+  nativeSelectCapture = new NativeSelectCapture({
+    emit: (ev) => send(ev),
+    makeEvent,
+  });
+
+  contentEditableCapture = new ContentEditableCapture({
+    emit: (ev) => send(ev),
+    makeEvent,
+    isCredentialField,
+    maskedFields,
+    debounceMs: FILL_DEBOUNCE_MS,
+  });
+
+  rangeCapture = new RangeCapture({
+    emit: (ev) => send(ev),
+    makeEvent,
+    debounceMs: 300,
   });
 
   // Install detached file upload interceptor
@@ -116,6 +141,18 @@ export function stopCapture() {
     focusState.reset();
     focusState = null;
   }
+  if (nativeSelectCapture) {
+    nativeSelectCapture.reset();
+    nativeSelectCapture = null;
+  }
+  if (contentEditableCapture) {
+    contentEditableCapture.reset();
+    contentEditableCapture = null;
+  }
+  if (rangeCapture) {
+    rangeCapture.reset();
+    rangeCapture = null;
+  }
   keyboardCapture = null;
   flushPendingFills();
   patch = null;
@@ -125,13 +162,15 @@ export function stopCapture() {
 
 function flushPendingFills(excludeTarget = null) {
   for (const [key, entry] of fillTimers.entries()) {
-    if (excludeTarget && (entry.target === excludeTarget || entry.target.contains(excludeTarget))) {
+    if (excludeTarget && (entry.target === excludeTarget || entry.target.contains?.(excludeTarget))) {
       continue;
     }
     clearTimeout(entry.timer);
     fillTimers.delete(key);
     entry.flush();
   }
+  if (contentEditableCapture) contentEditableCapture.flushPending(excludeTarget);
+  if (rangeCapture) rangeCapture.flushPending(excludeTarget);
 }
 
 // ── event construction ──────────────────────────────────────────────────────
@@ -289,8 +328,11 @@ function onClick(e) {
     }
   }
 
-  // <select> is handled on 'change', where the chosen option is known.
-  if (target.tagName === 'SELECT') return;
+  // <select> is handled on 'change' or on blur (same-value re-selection).
+  if (target.tagName === 'SELECT' || target.closest?.('select')) {
+    if (nativeSelectCapture) nativeSelectCapture.onTouch(target, e);
+    if (target.tagName === 'SELECT') return;
+  }
 
   const interactive = retargetToInteractive(target);
   const el = interactive || target;
@@ -359,11 +401,17 @@ function onFocusIn(e) {
   if (focusState) {
     focusState.onFocusIn(e);
   }
+  if (nativeSelectCapture && e.target) {
+    nativeSelectCapture.onTouch(e.target, e);
+  }
 }
 
 function onFocusOut(e) {
   if (focusState) {
     focusState.onFocusOut(e);
+  }
+  if (nativeSelectCapture && e.target) {
+    nativeSelectCapture.onBlur(e.target, e, makeEvent);
   }
 }
 
@@ -371,6 +419,21 @@ function onInput(e) {
   if (!bus.isRecording()) return;
   const target = e.target;
   if (!target) return;
+
+  if (contentEditableCapture && contentEditableCapture.isEditable(target)) {
+    safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
+    const key = generateSelector(target)?.selector;
+    contentEditableCapture.onInput(target, e, key, bus.guard());
+    return;
+  }
+
+  if (rangeCapture && rangeCapture.isRange(target)) {
+    safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
+    const key = generateSelector(target)?.selector;
+    rangeCapture.onInput(target, e, key, bus.guard());
+    return;
+  }
+
   const tag = target.tagName;
   if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
   const type = (target.getAttribute('type') || '').toLowerCase();
@@ -415,12 +478,21 @@ function onChange(e) {
   safeInvoke(`${patch.id}.onChange`, patch.capture.onChange, undefined, target, e, ctx);
 
   if (target.tagName === 'SELECT') {
-    const option = target.options[target.selectedIndex];
-    if (!option) return;
-    send(makeEvent('select', target, {
-      value: option.value,
-      meta: { optionLabel: (option.text || '').trim(), optionValue: option.value },
-    }));
+    if (nativeSelectCapture) {
+      nativeSelectCapture.onChange(target, e, makeEvent);
+    } else {
+      const option = target.options[target.selectedIndex];
+      if (!option) return;
+      send(makeEvent('select', target, {
+        value: option.value,
+        meta: { optionLabel: (option.text || '').trim(), optionValue: option.value },
+      }));
+    }
+    return;
+  }
+
+  if (rangeCapture && rangeCapture.isRange(target)) {
+    rangeCapture.onChange(target, e);
     return;
   }
 

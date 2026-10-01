@@ -21,6 +21,9 @@ import { ClickCorrelator } from '../src/core/capture/pointer/click-correlator.js
 import { classifyKey } from '../src/core/capture/keyboard/key-classifier.js';
 import { KeyboardCapture } from '../src/core/capture/keyboard/keyboard-capture.js';
 import { FocusState } from '../src/core/capture/focus/focus-state.js';
+import { NativeSelectCapture } from '../src/core/capture/input/native-select.js';
+import { ContentEditableCapture, resolveContentEditableRoot, extractContentEditableText } from '../src/core/capture/input/contenteditable.js';
+import { RangeCapture } from '../src/core/capture/input/range.js';
 
 describe('RecordActionTool Forensic Extraction Characterization Suite', () => {
   beforeEach(() => {
@@ -291,6 +294,209 @@ describe('RecordActionTool Forensic Extraction Characterization Suite', () => {
       expect(focusState.getActiveElement()).toBe(input2);
       expect(focusState.getPreviousElement()).toBe(input1);
       expect(flushed).toBe(true);
+    });
+  });
+
+  describe('NativeSelectCapture (Single, Multi & Same-Value Blur)', () => {
+    it('emits select action on change for single select with optionLabel and optionValue', () => {
+      const emitted = [];
+      const selectCapture = new NativeSelectCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+      });
+
+      document.body.innerHTML = `
+        <select id="invoice-type">
+          <option value="0">Standard</option>
+          <option value="1">Credit memo</option>
+          <option value="2">Debit memo</option>
+        </select>
+      `;
+
+      const select = document.getElementById('invoice-type');
+      select.selectedIndex = 2;
+
+      const handled = selectCapture.onChange(select, { target: select });
+      expect(handled).toBe(true);
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('select');
+      expect(emitted[0].value).toBe('2');
+      expect(emitted[0].meta.optionLabel).toBe('Debit memo');
+      expect(emitted[0].meta.optionValue).toBe('2');
+    });
+
+    it('emits select action with multiple values and labels for multi-select', () => {
+      const emitted = [];
+      const selectCapture = new NativeSelectCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+      });
+
+      document.body.innerHTML = `
+        <select id="roles" multiple>
+          <option value="admin" selected>Administrator</option>
+          <option value="editor" selected>Editor</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      `;
+
+      const select = document.getElementById('roles');
+      const handled = selectCapture.onChange(select, { target: select });
+      expect(handled).toBe(true);
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('select');
+      expect(emitted[0].values).toEqual(['admin', 'editor']);
+      expect(emitted[0].meta.optionLabels).toEqual(['Administrator', 'Editor']);
+    });
+
+    it('emits select on blur when user re-selects the same value without change event firing', () => {
+      const emitted = [];
+      const selectCapture = new NativeSelectCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+      });
+
+      document.body.innerHTML = `
+        <select id="currency">
+          <option value="USD" selected>US Dollar</option>
+          <option value="EUR">Euro</option>
+        </select>
+      `;
+
+      const select = document.getElementById('currency');
+      
+      // User touches dropdown (opens it)
+      selectCapture.onTouch(select, { target: select });
+
+      // User re-clicks the same default USD option; browser does NOT fire change
+      // User moves away -> blur fires
+      const handled = selectCapture.onBlur(select, { target: select });
+      expect(handled).toBe(true);
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('select');
+      expect(emitted[0].value).toBe('USD');
+      expect(emitted[0].meta.optionLabel).toBe('US Dollar');
+      expect(emitted[0].meta.isSameValueReSelection).toBe(true);
+    });
+
+    it('does NOT emit duplicate select on blur if change event already emitted', () => {
+      const emitted = [];
+      const selectCapture = new NativeSelectCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+      });
+
+      document.body.innerHTML = `
+        <select id="currency">
+          <option value="USD">US Dollar</option>
+          <option value="EUR">Euro</option>
+        </select>
+      `;
+
+      const select = document.getElementById('currency');
+      selectCapture.onTouch(select, { target: select });
+      
+      select.selectedIndex = 1;
+      selectCapture.onChange(select, { target: select });
+      expect(emitted.length).toBe(1);
+
+      // Blur follows change
+      const blurHandled = selectCapture.onBlur(select, { target: select });
+      expect(blurHandled).toBe(false);
+      expect(emitted.length).toBe(1); // No double emission
+    });
+  });
+
+  describe('ContentEditableCapture', () => {
+    it('resolves root contenteditable element from child nodes', () => {
+      document.body.innerHTML = `
+        <div id="editor-root" contenteditable="true">
+          <p id="para-1">Hello <span id="bold-text"><b>World</b></span></p>
+        </div>
+      `;
+
+      const bold = document.getElementById('bold-text');
+      const root = resolveContentEditableRoot(bold);
+      expect(root).not.toBeNull();
+      expect(root.id).toBe('editor-root');
+    });
+
+    it('extracts clean plain text from contenteditable element', () => {
+      document.body.innerHTML = `
+        <div id="editor-root" contenteditable="true">
+          <p>Line 1</p>
+          <p>Line 2</p>
+        </div>
+      `;
+
+      const root = document.getElementById('editor-root');
+      const text = extractContentEditableText(root);
+      expect(text).toContain('Line 1');
+      expect(text).toContain('Line 2');
+    });
+
+    it('debounces rapid typing in contenteditable into a single fill action', () => {
+      const emitted = [];
+      const ceCapture = new ContentEditableCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+        debounceMs: 200,
+      });
+
+      document.body.innerHTML = `
+        <div id="editor" contenteditable="true">Init</div>
+      `;
+
+      const editor = document.getElementById('editor');
+      ceCapture.onInput(editor, { target: editor }, '#editor');
+      
+      editor.textContent = 'Updated rich text content';
+      ceCapture.onInput(editor, { target: editor }, '#editor');
+
+      expect(emitted.length).toBe(0);
+
+      vi.advanceTimersByTime(250);
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('fill');
+      expect(emitted[0].value).toContain('Updated rich text content');
+      expect(emitted[0].meta.isContentEditable).toBe(true);
+    });
+  });
+
+  describe('RangeCapture', () => {
+    it('debounces range input drag events and settles on change', () => {
+      const emitted = [];
+      const rangeCapture = new RangeCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+        debounceMs: 150,
+      });
+
+      document.body.innerHTML = `
+        <input type="range" id="volume" min="0" max="100" step="5" value="50" />
+      `;
+
+      const slider = document.getElementById('volume');
+      slider.value = '65';
+      rangeCapture.onInput(slider, { target: slider }, '#volume');
+
+      slider.value = '80';
+      rangeCapture.onInput(slider, { target: slider }, '#volume');
+
+      expect(emitted.length).toBe(0);
+
+      // On mouseup / change release
+      slider.value = '85';
+      rangeCapture.onChange(slider, { target: slider });
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('fill');
+      expect(emitted[0].value).toBe('85');
+      expect(emitted[0].meta.isRange).toBe(true);
+      expect(emitted[0].meta.min).toBe('0');
+      expect(emitted[0].meta.max).toBe('100');
+      expect(emitted[0].meta.step).toBe('5');
     });
   });
 });
