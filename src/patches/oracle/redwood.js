@@ -132,19 +132,25 @@ export function resolveRedwoodHost(optionEl, lastTrigger = null, lastTriggerTime
     }
   }
 
-  // 4. Query active / expanded JET select hosts in the document
-  const activeHost = document.querySelector(
+  // 4. Query active / expanded JET select hosts in the document (explicit pass for expanded/open first)
+  const expandedHost = document.querySelector(
     'oj-c-select-single[aria-expanded="true"], ' +
     'oj-select-single[aria-expanded="true"], ' +
     'oj-c-combobox-one[aria-expanded="true"], ' +
     'oj-combobox-one[aria-expanded="true"], ' +
-    'oj-c-select-single.oj-focus, ' +
-    'oj-select-single.oj-focus, ' +
     'oj-c-select-single[open], ' +
     'oj-select-single[open]'
   );
+  if (expandedHost) return expandedHost;
 
-  return activeHost || null;
+  const focusedHost = document.querySelector(
+    'oj-c-select-single.oj-focus, ' +
+    'oj-select-single.oj-focus, ' +
+    'oj-c-combobox-one.oj-focus, ' +
+    'oj-combobox-one.oj-focus'
+  );
+
+  return focusedHost || null;
 }
 
 /**

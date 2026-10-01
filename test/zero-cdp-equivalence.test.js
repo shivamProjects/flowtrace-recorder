@@ -325,6 +325,75 @@ describe('TRACE-43: Zero-CDP vs CRX Transport Equivalence Characterization Suite
       document.body.removeChild(button);
     });
 
+    it('handles reused input element across multiple click initiators accurately', () => {
+      let capturedPayload = null;
+      const fileCapture = new FileCapture({
+        onFileSelected: (payload) => {
+          capturedPayload = payload;
+        }
+      });
+
+      const btn1 = document.createElement('button');
+      btn1.id = 'btn-first';
+      const btn2 = document.createElement('button');
+      btn2.id = 'btn-second';
+      document.body.appendChild(btn1);
+      document.body.appendChild(btn2);
+
+      const input = document.createElement('input');
+      input.type = 'file';
+
+      fileCapture.install(window);
+
+      // First click on btn1
+      fileCapture.recordInitiator(btn1);
+      input.click();
+
+      // Second click on btn2 reuses the same input
+      fileCapture.recordInitiator(btn2);
+      input.click();
+
+      // Set files property
+      Object.defineProperty(input, 'files', {
+        value: [{ name: 'statement.csv', size: 512, type: 'text/csv', lastModified: 1700000000 }],
+        writable: true
+      });
+
+      input.dispatchEvent(new Event('change'));
+
+      expect(capturedPayload).not.toBeNull();
+      expect(capturedPayload.initiatorElement).toBe(btn2);
+      expect(capturedPayload.files[0].name).toBe('statement.csv');
+
+      fileCapture.uninstall(window);
+      document.body.removeChild(btn1);
+      document.body.removeChild(btn2);
+    });
+
+    it('resolves actively expanded host ahead of preceding blurred element holding .oj-focus', () => {
+      const blurredHost = document.createElement('oj-c-select-single');
+      blurredHost.id = 'blurred-select';
+      blurredHost.className = 'oj-focus'; // Preceding in DOM, but blurred
+
+      const activeExpandedHost = document.createElement('oj-c-select-single');
+      activeExpandedHost.id = 'active-select';
+      activeExpandedHost.setAttribute('aria-expanded', 'true'); // Actively expanded
+
+      document.body.appendChild(blurredHost);
+      document.body.appendChild(activeExpandedHost);
+
+      const option = document.createElement('div');
+      option.className = 'oj-listbox-result-label';
+      document.body.appendChild(option);
+
+      const resolved = resolveRedwoodHost(option);
+      expect(resolved).toBe(activeExpandedHost);
+
+      document.body.removeChild(blurredHost);
+      document.body.removeChild(activeExpandedHost);
+      document.body.removeChild(option);
+    });
+
     it('extracts precise bounding box and occlusion metrics using GeometryCapture', () => {
       const geometry = new GeometryCapture();
       const div = document.createElement('div');

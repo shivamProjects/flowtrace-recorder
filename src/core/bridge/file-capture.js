@@ -26,6 +26,7 @@ export class FileCapture {
     this._originalShowPicker = null;
     this._installed = false;
     this._trackedInputs = new WeakSet();
+    this._inputMetadata = new WeakMap();
   }
 
   /**
@@ -106,13 +107,25 @@ export class FileCapture {
    * @private
    */
   _interceptFileInput(inputEl) {
-    if (this._trackedInputs.has(inputEl)) return;
-    this._trackedInputs.add(inputEl);
-
     const initiator = this.getActiveInitiator();
     const isDetached = !inputEl.isConnected;
 
+    // Update active initiator metadata even if the input element is reused
+    this._inputMetadata.set(inputEl, {
+      initiator,
+      isDetached,
+      timestamp: Date.now(),
+    });
+
+    if (this._trackedInputs.has(inputEl)) return;
+    this._trackedInputs.add(inputEl);
+
     const handleChange = () => {
+      const meta = this._inputMetadata.get(inputEl) || {
+        initiator: null,
+        isDetached: !inputEl.isConnected,
+      };
+
       const fileList = inputEl.files;
       const files = [];
 
@@ -131,9 +144,9 @@ export class FileCapture {
       if (files.length > 0) {
         this.onFileSelected({
           type: 'file-upload',
-          isDetached,
+          isDetached: meta.isDetached,
           inputElement: inputEl,
-          initiatorElement: initiator,
+          initiatorElement: meta.initiator,
           files,
           timestamp: Date.now(),
         });
@@ -141,6 +154,7 @@ export class FileCapture {
 
       inputEl.removeEventListener('change', handleChange);
       this._trackedInputs.delete(inputEl);
+      this._inputMetadata.delete(inputEl);
     };
 
     inputEl.addEventListener('change', handleChange, { once: true });
