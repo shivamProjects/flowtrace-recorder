@@ -6,6 +6,7 @@ import { compileActions } from '../src/core/background/compiler.js';
 import { makeEnvelope } from '../src/core/shared/schema.js';
 import { parseRecording, normalizeAction, assertReplayable } from '../../replayer/engine/normalize.ts';
 import { resolveScope, isTopFrame } from '../../replayer/engine/frames.ts';
+import { ReplaySurfaceRegistry } from '../../replayer/engine/surfaces.ts';
 
 describe('Zero-CDP Contract & Security Pipeline', () => {
   describe('P0 Security: External vs Internal Message Router Split', () => {
@@ -94,30 +95,35 @@ describe('Zero-CDP Contract & Security Pipeline', () => {
   });
 
   describe('P1 Pause Lifecycle Consistency', () => {
-    it('freezes lifecycle observer effect capture when recording is paused', () => {
+    it('freezes lifecycle observer effect capture and callbacks when recording is paused', () => {
       const surfaceRegistry = new SurfaceRegistry({ sessionId: 'test_session' });
       const correlator = new EffectCorrelator();
-      let captured = false;
+      const capturedEffects = [];
       let paused = true;
 
       const observers = new LifecycleObservers({
         surfaceRegistry,
         correlator,
-        onEffectCaptured: () => { captured = true; },
+        onEffectCaptured: (effect) => { capturedEffects.push(effect); },
         isPaused: () => paused,
       });
 
       expect(observers.isActive()).toBe(false);
-      paused = false;
       observers.start();
+      expect(observers.isActive()).toBe(false);
+
+      // When paused, isActive() returns false, which gates all observer handler callbacks
+      paused = false;
       expect(observers.isActive()).toBe(true);
+
       paused = true;
       expect(observers.isActive()).toBe(false);
+      observers.stop();
     });
   });
 
   describe('P0 Nested-Frame & Multi-Surface Canonical Contract Pipeline', () => {
-    it('end-to-end: capture -> compile -> envelope -> parse -> normalize -> resolveScope', async () => {
+    it('end-to-end: capture -> compile -> envelope -> parse -> normalize -> surface resolution -> resolveScope', async () => {
       const rawCapturedEvents = [
         {
           type: 'navigate',
@@ -175,9 +181,11 @@ describe('Zero-CDP Contract & Security Pipeline', () => {
       expect(normalized[1].frame.path).toEqual(['iframe#mainContainer', 'iframe#innerRegion']);
       expect(normalized[2].surfaceId).toBe('surface_popup_1');
 
-      // 6. Test Frame Resolution Chaining
-      const mockPage = {
+      // 6. Surface Resolution (ReplaySurfaceRegistry)
+      const mockMainPage = {
+        isClosed: () => false,
         url: () => 'https://fusion.oracle.com/fscmUI/faces/FuseWelcome',
+        context: () => mockContext,
         frameLocator: (sel) => ({
           _selector: sel,
           frameLocator: (nestedSel) => ({
@@ -186,11 +194,44 @@ describe('Zero-CDP Contract & Security Pipeline', () => {
         }),
       };
 
-      expect(isTopFrame(mockPage, normalized[0].frame)).toBe(true);
-      expect(isTopFrame(mockPage, normalized[1].frame)).toBe(false);
+      const mockPopupPage = {
+        isClosed: () => false,
+        url: () => 'https://fusion.oracle.com/fscmUI/faces/popup',
+        context: () => mockContext,
+        waitForLoadState: async () => {},
+        bringToFront: async () => {},
+        evaluate: async () => {},
+      };
 
-      const resolvedNestedScope = await resolveScope(mockPage, normalized[1]);
+      const mockContext = {
+        pages: () => [mockMainPage, mockPopupPage],
+        on: () => {},
+        off: () => {},
+      };
+
+      const surfaceRegistry = new ReplaySurfaceRegistry(mockMainPage, normalized);
+      surfaceRegistry.registerSurface('surface_popup_1', mockPopupPage);
+
+      const resolvedMainSurface = await surfaceRegistry.resolveSurface(normalized[0], mockMainPage);
+      expect(resolvedMainSurface).toBe(mockMainPage);
+
+      const resolvedPopupSurface = await surfaceRegistry.resolveSurface(normalized[2], mockMainPage);
+      expect(resolvedPopupSurface).toBe(mockPopupPage);
+
+      // 7. Test Frame Resolution Chaining
+      expect(isTopFrame(mockMainPage, normalized[0].frame)).toBe(true);
+      expect(isTopFrame(mockMainPage, normalized[1].frame)).toBe(false);
+
+      const resolvedNestedScope = await resolveScope(mockMainPage, normalized[1]);
       expect(resolvedNestedScope._selector).toBe('iframe#mainContainer -> iframe#innerRegion');
+
+      // 8. Fail-closed assertion on missing popup surface
+      const unresolvableAction = { ...normalized[2], surfaceId: 'surface_missing_popup' };
+      await expect(
+        surfaceRegistry.resolveSurface(unresolvableAction, mockMainPage, 0)
+      ).rejects.toThrow(/Target surface "surface_missing_popup" not found/);
+
+      surfaceRegistry.dispose();
     });
   });
 });

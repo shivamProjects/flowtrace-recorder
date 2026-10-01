@@ -222,14 +222,15 @@ export function createRouter(patches) {
 }
 
 /** Allowed origins for external Chrome runtime messages */
-const TRUSTED_EXTERNAL_ORIGINS = [
+const TRUSTED_EXTERNAL_ORIGINS = new Set([
   'https://platform.shivambhaipatel.com',
   'https://staging-platform.shivambhaipatel.com',
+  'https://flowtrace.shivambhaipatel.com',
   'http://localhost:3000',
   'http://localhost:3200',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3200',
-];
+]);
 
 function isExtensionUrl(url) {
   return typeof url === 'string' && (url.startsWith('chrome-extension://') || url.startsWith('moz-extension://'));
@@ -239,9 +240,7 @@ export function isAllowedExternalOrigin(sender) {
   if (!sender) return false;
   const rawOrigin = sender.origin || (sender.url ? safeOriginOf(sender.url) : null);
   if (!rawOrigin) return false;
-  return TRUSTED_EXTERNAL_ORIGINS.includes(rawOrigin) ||
-    rawOrigin.endsWith('.shivambhaipatel.com') ||
-    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(rawOrigin);
+  return TRUSTED_EXTERNAL_ORIGINS.has(rawOrigin);
 }
 
 function safeOriginOf(rawUrl) {

@@ -192,7 +192,7 @@ export class LifecycleObservers {
     // 1. Popup / Tab creation observer
     if (typeof chrome !== 'undefined' && chrome.tabs?.onCreated) {
       const onTabCreated = async (tab) => {
-        if (!this._active) return;
+        if (!this.isActive()) return;
         const openerTabId = tab.openerTabId || null;
 
         // Only track tabs opened from a known surface or within our session
@@ -232,7 +232,7 @@ export class LifecycleObservers {
     // 2. Tab removal / close observer
     if (typeof chrome !== 'undefined' && chrome.tabs?.onRemoved) {
       const onTabRemoved = (tabId) => {
-        if (!this._active) return;
+        if (!this.isActive()) return;
         if (this.surfaceRegistry.hasTab(tabId)) {
           const surface = this.surfaceRegistry.getByTabId(tabId);
           this.surfaceRegistry.removeTab(tabId);
@@ -256,7 +256,7 @@ export class LifecycleObservers {
     // 3. Navigation observer (webNavigation or tabs.onUpdated fallback)
     if (typeof chrome !== 'undefined' && chrome.webNavigation?.onCommitted) {
       const onNavCommitted = (details) => {
-        if (!this._active || details.frameId !== 0) return; // Top frame only
+        if (!this.isActive() || details.frameId !== 0) return; // Top frame only
         if (this.surfaceRegistry.hasTab(details.tabId)) {
           const surface = this.surfaceRegistry.updateNavigation(details.tabId, details.url);
           const effect = {
@@ -277,7 +277,7 @@ export class LifecycleObservers {
       this._listeners.push(() => chrome.webNavigation.onCommitted.removeListener(onNavCommitted));
     } else if (typeof chrome !== 'undefined' && chrome.tabs?.onUpdated) {
       const onTabUpdated = (tabId, changeInfo) => {
-        if (!this._active || !changeInfo.url) return;
+        if (!this.isActive() || !changeInfo.url) return;
         if (this.surfaceRegistry.hasTab(tabId)) {
           const surface = this.surfaceRegistry.updateNavigation(tabId, changeInfo.url);
           const effect = {
@@ -300,7 +300,7 @@ export class LifecycleObservers {
     // 4. Download observer
     if (typeof chrome !== 'undefined' && chrome.downloads?.onCreated) {
       const onDownloadCreated = (downloadItem) => {
-        if (!this._active) return;
+        if (!this.isActive()) return;
         const effect = {
           kind: 'download',
           downloadId: downloadItem.id,
