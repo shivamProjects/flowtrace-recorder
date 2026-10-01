@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { detectLov, LOV_KIND, stableLovSelector, shapeLovStep, baseOf } from '../src/patches/oracle/lov.js';
+import { detectLov, LOV_KIND, stableLovSelector, shapeLovStep, baseOf } from '@flowtrace/recorder-core';
 
 describe('Oracle LOV Classifier & Stable Selector (lov.js)', () => {
   beforeEach(() => {

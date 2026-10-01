@@ -29,7 +29,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CORE_FIXTURES, ORACLE_FIXTURES, mount } from './fixtures.js';
 import { generateSelector } from '../src/core/content/selector.js';
-import { resolveAdfLabel } from '../src/patches/oracle/labels.js';
+import { resolveAdfLabel } from '@flowtrace/recorder-core';
 
 /** Pull the CSS out of `page.locator('…')`; other locator forms have no CSS. */
 function cssInsideLocator(locator) {

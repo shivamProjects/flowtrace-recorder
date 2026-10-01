@@ -101,7 +101,7 @@ beforeEach(async () => {
   session = await import('../src/core/background/session.js');
   auth = await import('../src/core/auth/index.js');
   settings = await import('../src/core/shared/settings.js');
-  patches = await import('../src/patches/index.js');
+  patches = await import('@flowtrace/recorder-core');
 
   await auth.setSessionToken('a'.repeat(40), USER);
   await settings.setEnvironment(ENVIRONMENT);

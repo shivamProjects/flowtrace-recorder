@@ -12,8 +12,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { buildLocatorObject } from '../src/core/content/locator-object.js';
-import { resolveAdfLabel } from '../src/patches/oracle/labels.js';
-import { metaFor } from '../src/patches/oracle/capture.js';
+import { resolveAdfLabel, metaFor } from '@flowtrace/recorder-core';
 
 function mount(html) {
   document.body.innerHTML = html;

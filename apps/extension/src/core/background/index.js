@@ -6,10 +6,11 @@
  * of which applications are supported.
  */
 
-import * as patches from '../../patches/index.js';
+import { getPatch, hasPatch, listPatches } from '@flowtrace/recorder-core';
 import { createRouter, createExternalRouter } from './router.js';
 import * as session from './session.js';
 
+const patches = { getPatch, hasPatch, listPatches };
 const route = createRouter(patches);
 const routeExternal = createExternalRouter(patches);
 

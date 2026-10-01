@@ -6,7 +6,7 @@
  * registry, so `core/` stays buildable and testable with no patches present.
  */
 
-import { getPatch } from '../../patches/index.js';
+import { getPatch } from '@flowtrace/recorder-core';
 import { autoFillLogin } from './auto-login.js';
 import { startCapture, stopCapture } from './capture.js';
 import { isTopFrame } from './frames.js';

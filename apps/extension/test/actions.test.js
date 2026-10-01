@@ -14,8 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { compileActions, compileSteps } from '../src/core/background/compiler.js';
 import { ACTION_VERBS, LOCATOR_FIELDS, validateActions } from '../src/core/shared/schema.js';
 import { buildLocatorObject } from '../src/core/content/locator-object.js';
-import { metaFor } from '../src/patches/oracle/capture.js';
-import { resolveAdfLabel } from '../src/patches/oracle/labels.js';
+import { metaFor, resolveAdfLabel } from '@flowtrace/recorder-core';
 
 const only = (events) => compileActions(events)[0];
 

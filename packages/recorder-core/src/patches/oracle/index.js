@@ -1,16 +1,26 @@
 /**
  * Oracle Fusion / ADF patch.
  *
- * Split across four files because the concerns have different lifetimes:
+ * Split across files because the concerns have different lifetimes:
  *   selectors.js   the ADF markup vocabulary — changes when Fusion changes
  *   labels.js      how ADF associates a label with a control
  *   capture.js     what must be read live, before ADF destroys the evidence
  *   postprocess.js what can only be decided with the whole recording in hand
+ *   redwood.js     Oracle JET / Redwood component adapters
+ *   lov.js         ADF LOV dialog & search row resolution
  */
 
 import { capture, metaFor } from './capture.js';
 import { resolveAdfLabel } from './labels.js';
 import { postProcess } from './postprocess.js';
+
+export * from './labels.js';
+export * from './capture.js';
+export * from './lov.js';
+export * from './redwood.js';
+export * from './selectors.js';
+export * from './entry-url.js';
+export * from './postprocess.js';
 
 export default {
   id: 'oracle',

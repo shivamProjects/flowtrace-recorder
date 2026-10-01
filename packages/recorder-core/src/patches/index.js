@@ -3,7 +3,7 @@
  *
  * Adding support for a new application means adding a directory here and one
  * line to REGISTRY. Nothing in core/ changes, and nothing in core/ imports this
- * file — the two entry points inject the selected patch instead, which is what
+ * file — the entry points inject the selected patch instead, which is what
  * keeps the dependency arrow pointing one way.
  */
 
@@ -12,8 +12,16 @@ import genericPatch from './generic/index.js';
 import oraclePatch from './oracle/index.js';
 import ibmPatch from './ibm/index.js';
 
+export * as oracle from './oracle/index.js';
+export * from './oracle/index.js';
+export * as ibm from './ibm/index.js';
+export * as generic from './generic/index.js';
+export { default as genericPatch } from './generic/index.js';
+export { default as oraclePatch } from './oracle/index.js';
+export { default as ibmPatch } from './ibm/index.js';
+
 /** @type {Record<string, import('../shared/patch-api.js').Patch>} */
-const REGISTRY = {
+export const REGISTRY = {
   generic: normalisePatch(genericPatch),
   oracle: normalisePatch(oraclePatch),
   ibm: normalisePatch(ibmPatch),

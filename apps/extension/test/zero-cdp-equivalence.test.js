@@ -12,7 +12,7 @@ import {
   extractRedwoodOptionData,
   createRedwoodSelectEvent,
   getRedwoodLabel
-} from '../src/patches/oracle/redwood.js';
+} from '@flowtrace/recorder-core';
 import { frameAncestryPath } from '../src/core/content/frames.js';
 
 describe('TRACE-43: Zero-CDP vs CRX Transport Equivalence Characterization Suite', () => {

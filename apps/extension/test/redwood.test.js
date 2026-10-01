@@ -11,7 +11,7 @@ import {
   getRedwoodLabel,
   extractRedwoodOptionData,
   createRedwoodSelectEvent,
-} from '../src/patches/oracle/redwood.js';
+} from '@flowtrace/recorder-core';
 
 describe('Oracle Redwood / JET Component Adapter', () => {
   let dom;

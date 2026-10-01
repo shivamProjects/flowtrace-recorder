@@ -91,7 +91,7 @@ beforeEach(async () => {
   auth = await import('../src/core/auth/index.js');
   settings = await import('../src/core/shared/settings.js');
   session = await import('../src/core/background/session.js');
-  patches = await import('../src/patches/index.js');
+  patches = await import('@flowtrace/recorder-core');
   await settings.setEnvironment(null);
   await session.reset?.();
 });
@@ -179,7 +179,7 @@ describe('PLATFORM_LAUNCH_SESSION reports what actually happened', () => {
       ({ createRouter } = await import('../src/core/background/router.js'));
       auth = await import('../src/core/auth/index.js');
       settings = await import('../src/core/shared/settings.js');
-      patches = await import('../src/patches/index.js');
+      patches = await import('@flowtrace/recorder-core');
       await setup();
 
       const res = await createRouter(patches)(
