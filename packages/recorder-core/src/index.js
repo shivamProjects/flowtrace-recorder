@@ -26,6 +26,7 @@ export * as bus from './content/bus.js';
 
 export * from './page/page-recorder.js';
 export * from './compiler/compiler.js';
+export * from './compiler/envelope-factory.js';
 export * from './correlation/surface-registry.js';
 export * from './correlation/effect-correlator.js';
 export * from './correlation/dedup.js';

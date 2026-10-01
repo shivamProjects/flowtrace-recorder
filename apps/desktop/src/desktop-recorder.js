@@ -2,8 +2,8 @@
  * desktop-recorder.js — Observational Desktop Recorder Engine.
  *
  * Uses Playwright solely as a host shell to launch Chromium and expose the event bridge.
- * All user interaction capture, element inspection, locator construction, and patch
- * transformations run through the unified pure @flowtrace/recorder-core engine.
+ * All interaction capture, element targeting, locators, and patch transformations
+ * run through the pure @flowtrace/recorder-core engine and DesktopRecorderHost.
  *
  * Zero Playwright Codegen, zero _enableRecorder(), zero CDP interception.
  */
@@ -41,18 +41,17 @@ function detectBrowserChannel() {
 }
 
 class DesktopRecorder {
-  constructor() {
+  constructor(options = {}) {
+    this.options = options;
     this.browser = null;
     this.context = null;
     this.isRecording = false;
     this.originalUrl = null;
     this.recordingMode = 'instant';
-    this.patchId = 'oracle';
+    this.patchId = options.patchId || 'oracle';
     this.events = [];
-    this.host = new DesktopRecorderHost();
-    this.pageSurfaceMap = new WeakMap();
-    this.surfaceCounter = 1;
-    this.sessionId = `session_${Date.now()}`;
+    this.sessionId = `sess_desk_${Date.now()}`;
+    this.host = new DesktopRecorderHost({ sessionId: this.sessionId, storageDir: options.storageDir });
   }
 
   async _loadCore() {
@@ -64,23 +63,27 @@ class DesktopRecorder {
 
   async startRecording(url, mode = 'instant', patchId = 'oracle') {
     const startTime = Date.now();
-    LoggerService.logStep(1, 'Initializing Observational DesktopRecorder with Pure Core');
+    LoggerService.logStep(1, 'Initializing Observational DesktopRecorder with Pure Core and DesktopRecorderHost');
     try {
       if (this.isRecording) {
         return { success: false, error: 'Recording already in progress' };
       }
 
-      const core = await this._loadCore();
+      await this._loadCore();
       this.isRecording = true;
       this.originalUrl = url;
       this.recordingMode = mode;
-      this.patchId = patchId;
+      this.patchId = patchId || this.options.patchId || 'oracle';
       this.events = [];
-      this.sessionId = `session_${Date.now()}`;
+      this.sessionId = `sess_desk_${Date.now()}`;
+      this.host = new DesktopRecorderHost({ sessionId: this.sessionId, storageDir: this.options.storageDir });
 
-      const channel = detectBrowserChannel();
+      const channel = this.options.channel !== undefined ? this.options.channel : detectBrowserChannel();
+      const isHeadless = this.options.headless !== undefined
+        ? this.options.headless
+        : (process.env.PLAYWRIGHT_HEADLESS === 'true' || process.env.CI === 'true' || false);
       const launchOptions = {
-        headless: false,
+        headless: isHeadless,
         args: [
           '--disable-blink-features=AutomationControlled',
           '--no-default-browser-check',
@@ -98,62 +101,55 @@ class DesktopRecorder {
         if (!this.isRecording) return;
         if (payload && payload.action === 'RECORD_EVENT' && payload.event) {
           const event = payload.event;
-          const surfaceId = this.pageSurfaceMap.get(page) || `surface_main`;
-          event.surfaceId = surfaceId;
+          const surface = this.host.surfaces.getSurfaceByPage(page) || this.host.surfaces.registerPage(page);
+          event.surfaceId = surface.surfaceId;
           event.timestamp = event.timestamp || Date.now();
           this.events.push(event);
           this.host.storage.appendEvent(event);
         }
       });
 
-      // Find extension bundle dist
-      const extDist = path.resolve(__dirname, '../../extension/dist');
-      const selectorEnginePath = path.join(extDist, 'selector-engine.js');
-      const contentScriptPath = path.join(extDist, 'content.js');
+      // Inject host-neutral recorder runtime (page-runtime.js + selector-engine.js)
+      await this.host.injector.injectRecorderRuntime(this.context, this.patchId);
 
-      if (fsSync.existsSync(selectorEnginePath)) {
-        await this.context.addInitScript({ path: selectorEnginePath });
-      }
-
-      // Inject observational page recorder bootstrap
-      await this.context.addInitScript(`
-        (() => {
-          window.__FLOWTRACE_DESKTOP_HOST__ = true;
-          window.__flowtrace_patch_id__ = ${JSON.stringify(this.patchId)};
-        })();
-      `);
-
-      if (fsSync.existsSync(contentScriptPath)) {
-        await this.context.addInitScript({ path: contentScriptPath });
-      }
-
-      // Track multi-window surfaces and navigations
+      // Track multi-window surfaces and navigations through host observers
       this.context.on('page', (page) => {
-        const surfaceId = `surface_popup_${this.surfaceCounter++}`;
-        this.pageSurfaceMap.set(page, surfaceId);
+        const surface = this.host.surfaces.registerPage(page, 'popup');
 
         page.on('framenavigated', (frame) => {
           if (frame === page.mainFrame()) {
             const navUrl = frame.url();
             if (navUrl && !navUrl.startsWith('about:')) {
-              this.events.push({
+              const navEvent = {
                 type: 'navigate',
                 url: navUrl,
-                surfaceId,
+                surfaceId: surface.surfaceId,
                 timestamp: Date.now(),
-              });
+              };
+              this.events.push(navEvent);
+              this.host.navigation.emitCompleted(navUrl, surface.surfaceId, 200);
             }
           }
         });
 
         page.on('download', (download) => {
-          this.events.push({
+          const dlEvent = {
             type: 'download',
             url: download.url(),
             filename: download.suggestedFilename(),
-            surfaceId,
+            surfaceId: surface.surfaceId,
             timestamp: Date.now(),
+          };
+          this.events.push(dlEvent);
+          this.host.downloads.emitStarted({
+            id: `dl_${Date.now()}`,
+            url: download.url(),
+            filename: download.suggestedFilename(),
           });
+        });
+
+        page.on('close', () => {
+          this.host.surfaces.unregisterPage(page);
         });
       });
 
@@ -161,22 +157,25 @@ class DesktopRecorder {
         this.isRecording = false;
         this.browser = null;
         this.context = null;
+        this.host.lifecycle.emitStop();
       });
 
       let page = this.context.pages()[0];
       if (!page) page = await this.context.newPage();
-      this.pageSurfaceMap.set(page, 'surface_main');
+      const mainSurface = this.host.surfaces.registerPage(page, 'tab');
 
       page.on('framenavigated', (frame) => {
         if (frame === page.mainFrame()) {
           const navUrl = frame.url();
           if (navUrl && !navUrl.startsWith('about:')) {
-            this.events.push({
+            const navEvent = {
               type: 'navigate',
               url: navUrl,
-              surfaceId: 'surface_main',
+              surfaceId: mainSurface.surfaceId,
               timestamp: Date.now(),
-            });
+            };
+            this.events.push(navEvent);
+            this.host.navigation.emitCompleted(navUrl, mainSurface.surfaceId, 200);
           }
         }
       });
@@ -192,7 +191,7 @@ class DesktopRecorder {
         ? 'Browser opened in manual mode. Navigate to your desired page and perform your actions. Close the browser when finished.'
         : 'Recording started. Perform your actions, then close the browser window or click Stop to finish.';
 
-      return { success: true, message };
+      return { success: true, message, sessionId: this.sessionId };
     } catch (error) {
       console.error('Error starting recording:', error.message);
       this.isRecording = false;
@@ -215,6 +214,7 @@ class DesktopRecorder {
         this.context = null;
       }
       this.isRecording = false;
+      this.host.lifecycle.emitStop();
 
       return await this.processRecording();
     } catch (error) {
@@ -251,21 +251,31 @@ class DesktopRecorder {
         ? core.compileScript(processed, { sourceUrl: this.originalUrl, events: this.events }, patch)
         : '';
 
-      const envelope = {
-        schemaVersion: '2.0',
-        sessionId: this.sessionId,
-        sourceUrl: this.originalUrl || '',
+      // 4. Build strictly validated canonical Protocol 2.0 RecordingEnvelope
+      const envelope = core.buildRecordingEnvelope({
+        recordingSessionId: this.sessionId.startsWith('sess_')
+          ? undefined // Let factory generate clean UUID if needed
+          : this.sessionId,
         recordedAt: new Date().toISOString(),
-        hostType: 'desktop',
-        patch: {
-          id: patch?.id || this.patchId,
-          version: patch?.version || '1.0.0',
+        producer: {
+          kind: 'desktop',
+          version: '1.0.0',
+          platform: process.platform,
         },
-        actions,
-        steps,
-        rawEventCount: this.events.length,
-        processedEventCount: processed.length,
-      };
+        capabilities: ['multiSurface', 'nestedFrames', 'downloads', 'oracleADF'],
+        meta: {
+          sourceUrl: this.originalUrl || 'about:blank',
+          patchId: patch?.id || this.patchId,
+        },
+        steps: actions,
+      });
+
+      // Persist session envelope in host storage
+      await this.host.storage.saveSession({
+        envelope,
+        rawEvents: this.events,
+        processedEvents: processed,
+      });
 
       return {
         success: true,

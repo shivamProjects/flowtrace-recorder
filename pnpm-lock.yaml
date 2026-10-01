@@ -104,6 +104,9 @@ importers:
         specifier: workspace:*
         version: link:../recorder-host
     devDependencies:
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       vitest:
         specifier: ^2.1.8
         version: 2.1.8(@types/node@26.6.3)(jsdom@29.1.1(@noble/hashes@2.4.0))(supports-color@7.2.0)

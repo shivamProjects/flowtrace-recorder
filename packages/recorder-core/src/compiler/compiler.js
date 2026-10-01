@@ -177,7 +177,7 @@ function toAction(event, previousUrl) {
 
   if (type === 'navigate') {
     if (!event.url || event.url === previousUrl) return null;
-    return element('navigate', event, { url: event.url });
+    return element('navigate', event, { value: event.url, url: event.url });
   }
 
   if (type === 'fill') {
