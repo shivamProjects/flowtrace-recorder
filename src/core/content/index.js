@@ -107,7 +107,7 @@ function activate(patchId, eventCount) {
     mountWidget({
       patchId: patch.id,
       patchName: patch.name,
-      onStop: () => bus.requestStop(),
+      onStop: () => new Promise(resolve => bus.requestStop(resolve)),
       onPauseToggle: (paused) => {
         if (paused) bus.requestPause();
         else bus.requestResume();

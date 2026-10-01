@@ -98,16 +98,16 @@ export function requestStatus(callback) {
   }
 }
 
-export function requestStop() {
-  send({ action: 'STOP_RECORDING' });
+export function requestStop(callback) {
+  sendWithResponse({ action: 'STOP_RECORDING' }, callback);
 }
 
-export function requestPause() {
-  send({ action: 'PAUSE_RECORDING' });
+export function requestPause(callback) {
+  sendWithResponse({ action: 'PAUSE_RECORDING' }, callback);
 }
 
-export function requestResume() {
-  send({ action: 'RESUME_RECORDING' });
+export function requestResume(callback) {
+  sendWithResponse({ action: 'RESUME_RECORDING' }, callback);
 }
 
 function send(message) {
@@ -119,5 +119,20 @@ function send(message) {
   } catch {
     // Extension was reloaded out from under this page. Nothing to do; the
     // content script in the next page load will re-register.
+  }
+}
+
+function sendWithResponse(message, callback) {
+  try {
+    if (!chrome?.runtime?.id) {
+      callback?.(null);
+      return;
+    }
+    chrome.runtime.sendMessage(message, (resp) => {
+      void chrome.runtime.lastError;
+      callback?.(resp);
+    });
+  } catch {
+    callback?.(null);
   }
 }

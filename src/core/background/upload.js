@@ -38,7 +38,7 @@ import { makeEnvelope } from '../shared/schema.js';
 import { apiErrorMessage, apiUrl, getEnvironment, unwrap } from '../shared/settings.js';
 import * as session from './session.js';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 3_000;
 
 /**
  * The environments this account may file a recording under.

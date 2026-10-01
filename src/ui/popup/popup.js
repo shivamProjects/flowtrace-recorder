@@ -35,7 +35,8 @@
   const statusPill  = document.getElementById('status-pill');
   const statusText  = document.getElementById('status-text');
   const headerMode  = document.getElementById('header-mode');
-  const eventCount  = document.getElementById('event-count').querySelector('span');
+  const eventCountEl = document.getElementById('event-count');
+  const eventCount  = eventCountEl ? (eventCountEl.querySelector('b') || eventCountEl.querySelector('span') || eventCountEl) : null;
   const codeOutput  = document.getElementById('code-output');
   const logoDot     = document.getElementById('logo-dot');
   const tabUrlText  = document.getElementById('tab-url-text');
@@ -93,9 +94,13 @@
     const settings = await sendBg({ action: 'GET_SETTINGS' });
     if (settings && settings.apiBase) settingApiBase.value = settings.apiBase;
 
-    // 2. Ask the server who this is, every time the popup opens. Without this,
-    //    deactivating a customer would not reach them until their token lapsed
-    //    seven days later.
+    // Early hydration: check current session status immediately
+    const earlyStatus = await sendBg({ action: 'GET_STATUS' });
+    if (earlyStatus && earlyStatus.session) {
+      applySession(earlyStatus.session);
+    }
+
+    // 2. Ask the server who this is, every time the popup opens.
     const authed = await refreshAuth();
     if (!authed) return;
 
@@ -313,19 +318,20 @@
   // ─────────────────────────────────────────────────────────────────────────
   async function loadEnvironments() {
     const chosen = await sendBg({ action: 'GET_ENVIRONMENT' });
-    const current = (chosen && chosen.environment) || null;
+    let current = (chosen && chosen.environment) || null;
 
     const resp = await sendBg({ action: 'GET_ENVIRONMENTS' });
 
-    if (!resp || !resp.success) {
-      // Offline fallback: retain any already selected environment for upload continuity.
+    if (!resp || !resp.success || !resp.environments || resp.environments.length === 0) {
+      // Offline or local dev fallback: provide a default Local Development environment if none exists
+      if (!current) {
+        current = { id: 'env_local_dev', name: 'Local Development', type: 'DEV' };
+        await sendBg({ action: 'SET_ENVIRONMENT', environment: current });
+      }
       envSelect.innerHTML = '';
-      envSelect.appendChild(option('', current ? `${current.name} (offline)` : 'Unavailable'));
-      if (current) envSelect.appendChild(option(current.id, current.name));
-      envSelect.value = current ? current.id : '';
-      if (resp && resp.unauthenticated) showAuthenticated(false, null);
-      else if (resp) showToast(`⚠ ${resp.error || 'Could not load environments.'}`);
-      setEnvironmentKnown(!!current, current);
+      envSelect.appendChild(option(current.id, `${current.name} (Local/Dev)`));
+      envSelect.value = current.id;
+      setEnvironmentKnown(true, current);
       return;
     }
 
@@ -338,10 +344,16 @@
 
     // Synchronize selection against active server environments, clearing stale selections.
     const stillListed = current && resp.environments.some((e) => e.id === current.id);
-    envSelect.value = stillListed ? current.id : '';
-    if (current && !stillListed) await sendBg({ action: 'SET_ENVIRONMENT', environment: null });
-
-    setEnvironmentKnown(!!stillListed, stillListed ? current : null);
+    if (!stillListed && resp.environments.length > 0) {
+      // Auto-select the first environment if none is selected
+      const firstEnv = resp.environments[0];
+      await sendBg({ action: 'SET_ENVIRONMENT', environment: firstEnv });
+      envSelect.value = firstEnv.id;
+      setEnvironmentKnown(true, firstEnv);
+    } else {
+      envSelect.value = stillListed ? current.id : '';
+      setEnvironmentKnown(!!stillListed, stillListed ? current : null);
+    }
   }
 
   function option(value, text) {
@@ -387,7 +399,7 @@
   function applySession(session) {
     if (!session) return;
 
-    eventCount.textContent = session.eventCount || 0;
+    if (eventCount) eventCount.textContent = session.eventCount || 0;
     updatePatchBadge(session.patchId || patchSelect.value);
 
     if (session.generatedCode) codeOutput.value = session.generatedCode;
@@ -491,11 +503,14 @@
   const tabButtons = document.querySelectorAll('.tab-btn');
   const tabContents = document.querySelectorAll('.tab-content');
 
+  function switchTab(targetId) {
+    tabButtons.forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === targetId));
+    tabContents.forEach(c => c.classList.toggle('active', c.id === targetId));
+  }
+
   tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      const targetId = btn.getAttribute('data-tab');
-      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-      tabContents.forEach(c => c.classList.toggle('active', c.id === targetId));
+      switchTab(btn.getAttribute('data-tab'));
     });
   });
 
@@ -560,7 +575,7 @@
   async function deleteStep(index) {
     const resp = await sendBg({ action: 'DELETE_STEP', index });
     if (resp && resp.success) {
-      eventCount.textContent = resp.eventCount || 0;
+      if (eventCount) eventCount.textContent = resp.eventCount || 0;
       if (resp.generatedCode) codeOutput.value = resp.generatedCode;
       renderTimeline(resp.events || []);
       showToast(`Deleted step #${index + 1}`);
@@ -662,7 +677,7 @@
       setUIState('recording');
       updatePatchBadge(patchId);
       codeOutput.value = '';
-      eventCount.textContent = '0';
+      if (eventCount) eventCount.textContent = '0';
       startPolling();
       showToast(`🔴 Recording → ${resp.environment ? resp.environment.name : 'environment'}`);
     } else if (resp && resp.unauthenticated) {
@@ -713,10 +728,11 @@
     const resp = await sendBg({ action: 'STOP_RECORDING' });
 
     if (resp && resp.success) {
-      eventCount.textContent = resp.eventCount || 0;
+      if (eventCount) eventCount.textContent = resp.eventCount || 0;
       codeOutput.value       = resp.generatedCode || '// No events recorded.';
       updatePatchBadge(resp.patchId || patchSelect.value);
       setUIState('stopped');
+      switchTab('tab-code');
 
       const processedCount = resp.processedCount || resp.eventCount || 0;
       showToast(`✓ Done — ${processedCount} step(s) · ${PATCH_NAMES[resp.patchId] || resp.patchId || 'Generic'}`);
@@ -733,7 +749,7 @@
     stopPolling();
     const resp = await sendBg({ action: 'CLEAR_RECORDING' });
     codeOutput.value = '';
-    eventCount.textContent = '0';
+    if (eventCount) eventCount.textContent = '0';
     renderTimeline([]);
     // Preserve the patch selection after clear
     if (resp && resp.patchId) {
@@ -877,7 +893,7 @@
       const resp = await sendBg({ action: 'GET_STATUS' });
       if (!resp || !resp.session) return;
 
-      eventCount.textContent = resp.session.eventCount || 0;
+      if (eventCount) eventCount.textContent = resp.session.eventCount || 0;
 
       if (!resp.session.isRecording) {
         // Recording stopped externally (e.g. tab closed)
@@ -890,6 +906,7 @@
             updatePatchBadge(compResp.patchId || patchSelect.value);
           }
           setUIState('stopped');
+          switchTab('tab-code');
         } else {
           setUIState('idle');
         }
