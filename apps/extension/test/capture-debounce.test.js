@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startCapture, stopCapture } from '../src/core/content/capture.js';
-import { normalisePatch } from '../src/core/shared/patch-api.js';
-import * as bus from '../src/core/content/bus.js';
+import { startCapture, stopCapture } from '@flowtrace/recorder-core';
+import { normalisePatch } from '@flowtrace/recorder-core';
+import * as bus from '@flowtrace/recorder-core';
 
 describe('capture debounce ordering & flush', () => {
   let sent = [];

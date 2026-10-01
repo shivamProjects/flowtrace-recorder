@@ -18,7 +18,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   generateSelector, gridCellSelector, isPositional, isStableId,
-} from '../src/core/content/selector.js';
+} from '@flowtrace/recorder-core';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ENGINE_GLOBAL = '__flowtracePwInjected';

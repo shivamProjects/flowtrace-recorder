@@ -11,7 +11,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { buildLocatorObject } from '../src/core/content/locator-object.js';
+import { buildLocatorObject } from '@flowtrace/recorder-core';
 import { resolveAdfLabel, metaFor } from '@flowtrace/recorder-core';
 
 function mount(html) {

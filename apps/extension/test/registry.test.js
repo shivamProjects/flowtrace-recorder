@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ComponentRegistry, GenericInputAdapter, GenericSelectAdapter, defaultRegistry } from '../src/core/components/registry.js';
+import { ComponentRegistry, GenericInputAdapter, GenericSelectAdapter, defaultRegistry } from '@flowtrace/recorder-core';
 
 describe('ComponentRegistry & Evidence Scoring (registry.js)', () => {
   beforeEach(() => {

@@ -89,7 +89,7 @@ beforeEach(async () => {
 
   ({ createRouter } = await import('../src/core/background/router.js'));
   auth = await import('../src/core/auth/index.js');
-  settings = await import('../src/core/shared/settings.js');
+  settings = await import('@flowtrace/recorder-core');
   session = await import('../src/core/background/session.js');
   patches = await import('@flowtrace/recorder-core');
   await settings.setEnvironment(null);
@@ -178,7 +178,7 @@ describe('PLATFORM_LAUNCH_SESSION reports what actually happened', () => {
       installChrome();
       ({ createRouter } = await import('../src/core/background/router.js'));
       auth = await import('../src/core/auth/index.js');
-      settings = await import('../src/core/shared/settings.js');
+      settings = await import('@flowtrace/recorder-core');
       patches = await import('@flowtrace/recorder-core');
       await setup();
 

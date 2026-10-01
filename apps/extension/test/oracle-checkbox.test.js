@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ablate, BUNDLE } from './capture-harness.js';
 
-const SOURCE = resolve(import.meta.dirname, '..', 'src', 'core', 'content', 'capture.js');
+const SOURCE = resolve(import.meta.dirname, '../../../packages/recorder-core/src/content/capture.js');
 
 // The descend rule, exactly as it appears in capture.js.
 const DESCEND_RULE = `  if (target.querySelectorAll) {

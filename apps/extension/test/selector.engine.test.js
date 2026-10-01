@@ -21,7 +21,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { generateSelector } from '../src/core/content/selector.js';
+import { generateSelector } from '@flowtrace/recorder-core';
 import { ORACLE_FIXTURES, mount } from './fixtures.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');

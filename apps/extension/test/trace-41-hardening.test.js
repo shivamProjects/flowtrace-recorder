@@ -12,8 +12,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as session from '../src/core/background/session.js';
 import { createRouter } from '../src/core/background/router.js';
-import { compileActions, compileSteps, compileScript } from '../src/core/background/compiler.js';
-import { validateActions } from '../src/core/shared/schema.js';
+import { compileActions, compileSteps, compileScript } from '@flowtrace/recorder-core';
+import { validateActions } from '@flowtrace/recorder-core';
 import { LifecycleObservers } from '../src/core/background/observers.js';
 
 function installChrome() {

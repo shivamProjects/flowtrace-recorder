@@ -25,7 +25,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_VERSION } from '../src/core/shared/schema.js';
+import { SCHEMA_VERSION } from '@flowtrace/recorder-core';
 
 /** A JWT this code can read the expiry out of. Signature is irrelevant here. */
 function tokenExpiringIn(seconds) {
@@ -124,7 +124,7 @@ async function loadModules() {
   vi.resetModules();
   const auth = await import('../src/core/auth/index.js');
   const store = await import('../src/core/auth/store.js');
-  const settings = await import('../src/core/shared/settings.js');
+  const settings = await import('@flowtrace/recorder-core');
   const { createRouter } = await import('../src/core/background/router.js');
   return { auth, store, settings, createRouter };
 }

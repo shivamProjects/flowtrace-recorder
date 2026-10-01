@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
-import { compileActions } from '../src/core/background/compiler.js';
+import { compileActions } from '@flowtrace/recorder-core';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const recorderRoot = resolve(here, '..');

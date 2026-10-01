@@ -22,7 +22,10 @@ export * from './content/widget.js';
 export * from './content/dom.js';
 export * from './content/escape.js';
 export * from './content/required.js';
+export * from './content/frames.js';
+export * from './content/auto-login.js';
 export * from './content/capture.js';
+export * from './content/bus.js';
 export * as bus from './content/bus.js';
 
 export * from './page/page-recorder.js';
@@ -33,7 +36,9 @@ export * from './correlation/effect-correlator.js';
 export * from './correlation/dedup.js';
 export * from './bridge/file-capture.js';
 export * from './bridge/frame-registry.js';
+export * from './bridge/recorder-bridge.js';
 export * from './evidence/geometry.js';
+export * from './evidence/screenshot.js';
 
 export * from './shared/schema.js';
 export * from './shared/patch-api.js';

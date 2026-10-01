@@ -11,11 +11,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { compileActions, compileScript, compileSteps } from '../src/core/background/compiler.js';
-import { startCapture, stopCapture } from '../src/core/content/capture.js';
-import { normalisePatch } from '../src/core/shared/patch-api.js';
-import { MASKED_VALUE, isSensitiveField, maskEvent } from '../src/core/shared/sensitive.js';
-import * as bus from '../src/core/content/bus.js';
+import { compileActions, compileScript, compileSteps } from '@flowtrace/recorder-core';
+import { startCapture, stopCapture } from '@flowtrace/recorder-core';
+import { normalisePatch } from '@flowtrace/recorder-core';
+import { MASKED_VALUE, isSensitiveField, maskEvent } from '@flowtrace/recorder-core';
+import * as bus from '@flowtrace/recorder-core';
 
 const SECRET = 'ATOM#integrate1';
 

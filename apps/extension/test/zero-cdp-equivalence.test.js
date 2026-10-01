@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SurfaceRegistry } from '../src/core/background/surface-registry.js';
 import { LifecycleObservers, EffectCorrelator } from '../src/core/background/observers.js';
-import { RecorderBridge } from '../src/core/bridge/recorder-bridge.js';
-import { FrameRegistry } from '../src/core/bridge/frame-registry.js';
-import { FileCapture } from '../src/core/bridge/file-capture.js';
-import { GeometryCapture } from '../src/core/evidence/geometry.js';
+import { RecorderBridge } from '@flowtrace/recorder-core';
+import { FrameRegistry } from '@flowtrace/recorder-core';
+import { FileCapture } from '@flowtrace/recorder-core';
+import { GeometryCapture } from '@flowtrace/recorder-core';
 import {
   isRedwoodHost,
   findRedwoodOption,
@@ -13,7 +13,7 @@ import {
   createRedwoodSelectEvent,
   getRedwoodLabel
 } from '@flowtrace/recorder-core';
-import { frameAncestryPath } from '../src/core/content/frames.js';
+import { frameAncestryPath } from '@flowtrace/recorder-core';
 
 describe('TRACE-43: Zero-CDP vs CRX Transport Equivalence Characterization Suite', () => {
   describe('1. Surface Lifecycle & Multi-Tab Popups (Equivalence with CrxTransport Page/Target events)', () => {

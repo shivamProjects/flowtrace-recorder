@@ -6,12 +6,17 @@
  * registry, so `core/` stays buildable and testable with no patches present.
  */
 
-import { getPatch } from '@flowtrace/recorder-core';
-import { autoFillLogin } from './auto-login.js';
-import { startCapture, stopCapture } from './capture.js';
-import { isTopFrame } from './frames.js';
-import { mountWidget, setWidgetCount, unmountWidget } from './widget.js';
-import * as bus from './bus.js';
+import {
+  getPatch,
+  autoFillLogin,
+  startCapture,
+  stopCapture,
+  isTopFrame,
+  mountWidget,
+  setWidgetCount,
+  unmountWidget,
+  bus,
+} from '@flowtrace/recorder-core';
 
 // The manifest injects this script, and START_RECORDING injects it again to
 // reach frames that loaded before recording began. Re-running would register a

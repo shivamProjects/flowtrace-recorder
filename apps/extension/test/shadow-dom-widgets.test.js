@@ -9,12 +9,12 @@ import {
   resolveLabel,
   inferRole,
   retargetToInteractive,
-} from '../src/core/content/dom.js';
+} from '@flowtrace/recorder-core';
 import {
   findLoginField,
   findSignInButton,
   setNativeValue,
-} from '../src/core/content/auto-login.js';
+} from '@flowtrace/recorder-core';
 
 describe('DOM & Shadow DOM Enhancement Utilities', () => {
   beforeEach(() => {

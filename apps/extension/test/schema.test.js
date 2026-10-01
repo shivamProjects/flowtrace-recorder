@@ -14,7 +14,7 @@ import {
   makeEnvelope,
   pruneLocator,
   validate,
-} from '../src/core/shared/schema.js';
+} from '@flowtrace/recorder-core';
 
 const click = (extra = {}) => ({ action: 'click', skipInReport: false, ...extra });
 

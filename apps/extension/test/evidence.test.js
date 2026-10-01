@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { GeometryCapture } from '../src/core/evidence/geometry.js';
-import { ScreenshotManager } from '../src/core/evidence/screenshot.js';
+import { GeometryCapture } from '@flowtrace/recorder-core';
+import { ScreenshotManager } from '@flowtrace/recorder-core';
 
 describe('GeometryCapture (geometry.js)', () => {
   beforeEach(() => {

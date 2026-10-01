@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { compileScript, compileSteps } from '../src/core/background/compiler.js';
+import { compileScript, compileSteps } from '@flowtrace/recorder-core';
 
 const session = { sourceUrl: 'https://example.test/start', events: [] };
 const patch = { id: 'oracle', name: 'Oracle Fusion', version: '2.0.0' };

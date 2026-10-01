@@ -100,7 +100,7 @@ beforeEach(async () => {
   ({ createRouter } = await import('../src/core/background/router.js'));
   session = await import('../src/core/background/session.js');
   auth = await import('../src/core/auth/index.js');
-  settings = await import('../src/core/shared/settings.js');
+  settings = await import('@flowtrace/recorder-core');
   patches = await import('@flowtrace/recorder-core');
 
   await auth.setSessionToken('a'.repeat(40), USER);

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RecorderBridge } from '../src/core/bridge/recorder-bridge.js';
-import { FrameRegistry } from '../src/core/bridge/frame-registry.js';
-import { FileCapture } from '../src/core/bridge/file-capture.js';
+import { RecorderBridge } from '@flowtrace/recorder-core';
+import { FrameRegistry } from '@flowtrace/recorder-core';
+import { FileCapture } from '@flowtrace/recorder-core';
 
 describe('RecorderBridge (recorder-bridge.js)', () => {
   it('sends messages with monotonic sequence numbers and receives ACK', async () => {

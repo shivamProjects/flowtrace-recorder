@@ -34,8 +34,7 @@
  */
 
 import * as auth from '../auth/index.js';
-import { makeEnvelope } from '../shared/schema.js';
-import { apiErrorMessage, apiUrl, getEnvironment, unwrap } from '../shared/settings.js';
+import { makeEnvelope, apiErrorMessage, apiUrl, getEnvironment, unwrap } from '@flowtrace/recorder-core';
 import * as session from './session.js';
 
 const REQUEST_TIMEOUT_MS = 3_000;

@@ -8,7 +8,7 @@
  * worker lifetime.
  */
 
-import { DEFAULT_PATCH_ID } from '../shared/patch-api.js';
+import { DEFAULT_PATCH_ID } from '@flowtrace/recorder-core';
 import { SurfaceRegistry } from './surface-registry.js';
 import { EffectCorrelator, LifecycleObservers } from './observers.js';
 

@@ -6,12 +6,19 @@
  */
 
 import * as auth from '../auth/index.js';
-import { safeInvoke } from '../shared/patch-api.js';
-import { maskEvent } from '../shared/sensitive.js';
-import { getApiBase, getEnvironment, setApiBase, setEnvironment } from '../shared/settings.js';
-import { makeNavigateEvent } from '../shared/types.js';
-import { shouldAccept } from './dedup.js';
-import { compileActions, compileScript, compileSteps } from './compiler.js';
+import {
+  safeInvoke,
+  maskEvent,
+  getApiBase,
+  getEnvironment,
+  setApiBase,
+  setEnvironment,
+  makeNavigateEvent,
+  shouldAccept,
+  compileActions,
+  compileScript,
+  compileSteps,
+} from '@flowtrace/recorder-core';
 import * as session from './session.js';
 import { listEnvironments, uploadRecording } from './upload.js';
 

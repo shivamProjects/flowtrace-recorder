@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createRouter, createExternalRouter, isAllowedExternalOrigin } from '../src/core/background/router.js';
 import { EffectCorrelator, LifecycleObservers } from '../src/core/background/observers.js';
 import { SurfaceRegistry } from '../src/core/background/surface-registry.js';
-import { compileActions } from '../src/core/background/compiler.js';
-import { makeEnvelope, validateActions } from '../src/core/shared/schema.js';
+import { compileActions } from '@flowtrace/recorder-core';
+import { makeEnvelope, validateActions } from '@flowtrace/recorder-core';
 
 describe('Zero-CDP Contract & Security Pipeline', () => {
   describe('P0 Security: External vs Internal Message Router Split', () => {

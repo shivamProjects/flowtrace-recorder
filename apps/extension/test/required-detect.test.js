@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { detectRequired, isRequired, __internals } from '../src/core/content/required.js';
+import { detectRequired, isRequired, __internals } from '@flowtrace/recorder-core';
 
 /** @param {string} html */
 function load(html) {
