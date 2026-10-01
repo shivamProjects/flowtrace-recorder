@@ -1,0 +1,19 @@
+{
+  "fixture": "springboard.html",
+  "source": "Oracle Fusion — Springboard Navigation Strip (ibqwjb-test, 2026-08-25)",
+  "widget": "Oracle Fusion Springboard",
+  "cases": [
+    {
+      "name": "Springboard cluster tile records click action",
+      "click": "document.getElementById('groupNode_Payables')",
+      "expect": { "type": "click" },
+      "because": "Clicking an icon tile on springboard must record clean click on cluster tile"
+    },
+    {
+      "name": "Springboard navigation caret records click action",
+      "click": "document.getElementById('clusters-right-nav')",
+      "expect": { "type": "click" },
+      "because": "Clicking pagination caret must record navigation click"
+    }
+  ]
+}

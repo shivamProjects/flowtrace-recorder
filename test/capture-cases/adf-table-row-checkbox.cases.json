@@ -1,0 +1,13 @@
+{
+  "fixture": "adf-table-row-checkbox.html",
+  "source": "Oracle Fusion — Setup and Maintenance > Fixed Assets > Manage Asset Locations (exsp-dev33, 2026-09-09)",
+  "widget": "ADF Table Row Checkbox",
+  "cases": [
+    {
+      "name": "active row checkbox toggles as a check event",
+      "click": "document.querySelector('input[type=checkbox]')",
+      "expect": { "type": "check" },
+      "because": "Checkbox in active row must record semantic check rather than generic click"
+    }
+  ]
+}

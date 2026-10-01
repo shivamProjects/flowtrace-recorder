@@ -1,0 +1,19 @@
+{
+  "fixture": "adf-split-button-save.html",
+  "source": "Oracle Fusion — Receivables > Billing > Create Transaction action toolbar (exsp-dev33, 2026-09-08)",
+  "widget": "ADF Split Button Toolbar",
+  "cases": [
+    {
+      "name": "Save button records click action on the button",
+      "click": "document.querySelector('a.xrg')",
+      "expect": { "type": "click" },
+      "because": "Clicking the primary button of a split button must record a clean click with accessible label"
+    },
+    {
+      "name": "Delete button records click action",
+      "click": "document.querySelector('[id*=\"commandToolbarButton1\"] a')",
+      "expect": { "type": "click" },
+      "because": "Toolbar action button must be recorded as a clickable target"
+    }
+  ]
+}

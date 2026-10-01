@@ -124,7 +124,7 @@ export function clickExpr(expr) {
   return new Function(`
     const el = ${expr};
     if (!el) throw new Error('harness: no element matched: ${expr.replace(/'/g, "\\'")}');
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   `);
 }
 

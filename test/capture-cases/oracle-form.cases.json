@@ -1,0 +1,19 @@
+{
+  "fixture": "oracle-test.html",
+  "source": "Oracle Fusion — Create Depreciation Method (ibqwjb-test, 2026-08-25)",
+  "widget": "ADF Form Inputs & LOV Search Icon",
+  "cases": [
+    {
+      "name": "Life in Years input records click action",
+      "click": "document.getElementById('B:TransLifeInYearsId::content')",
+      "expect": { "type": "click" },
+      "because": "Clicking ADF input must resolve target input"
+    },
+    {
+      "name": "LOV search icon records click action",
+      "click": "document.querySelector('a.x1o2')",
+      "expect": { "type": "click" },
+      "because": "Clicking background sprite LOV launcher must record click on launcher anchor"
+    }
+  ]
+}

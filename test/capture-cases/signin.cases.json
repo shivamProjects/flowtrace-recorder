@@ -1,0 +1,19 @@
+{
+  "fixture": "signin.html",
+  "source": "Oracle IDCS Sign In Form (ibqwjb-test, 2026-08-25)",
+  "widget": "Oracle IDCS Sign In Screen",
+  "cases": [
+    {
+      "name": "Next button records click action",
+      "click": "document.getElementById('go')",
+      "expect": { "type": "click" },
+      "because": "Clicking sign-in submit button must record clean click"
+    },
+    {
+      "name": "User Name input records click action",
+      "click": "document.getElementById('u')",
+      "expect": { "type": "click" },
+      "because": "Clicking username input must resolve username field"
+    }
+  ]
+}
