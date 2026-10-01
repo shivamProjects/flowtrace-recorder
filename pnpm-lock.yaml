@@ -10,6 +10,15 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@flowtrace/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@flowtrace/recorder-core':
+        specifier: workspace:*
+        version: link:../../packages/recorder-core
+      '@flowtrace/recorder-host':
+        specifier: workspace:*
+        version: link:../../packages/recorder-host
       cookie-parser:
         specifier: ~1.4.4
         version: 1.4.7
@@ -53,6 +62,12 @@ importers:
       '@flowtrace/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@flowtrace/recorder-core':
+        specifier: workspace:*
+        version: link:../../packages/recorder-core
+      '@flowtrace/recorder-host':
+        specifier: workspace:*
+        version: link:../../packages/recorder-host
     devDependencies:
       esbuild:
         specifier: ^0.25.0

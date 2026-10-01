@@ -13,8 +13,8 @@
  * recording in the same tab inherited the first one's data.
  */
 
-import { cleanText, normaliseFieldName } from '../../core/content/dom.js';
-import { detectRequired } from '../../core/content/required.js';
+import { cleanText, normaliseFieldName } from '../../content/dom.js';
+import { detectRequired } from '../../content/required.js';
 import { resolveAdfLabel } from './labels.js';
 import {
   resolveRedwoodHost, getRedwoodLabel, extractRedwoodOptionData,

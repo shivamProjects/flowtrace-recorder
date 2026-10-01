@@ -15,7 +15,9 @@
     "package": "node scripts/package-zip.mjs"
   },
   "dependencies": {
-    "@flowtrace/contracts": "workspace:*"
+    "@flowtrace/contracts": "workspace:*",
+    "@flowtrace/recorder-core": "workspace:*",
+    "@flowtrace/recorder-host": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

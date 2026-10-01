@@ -14,8 +14,8 @@
  */
 
 import { collapseRepeatedFills, collapseRepeatedNavigations } from '../shared/postprocess-helpers.js';
-import { pruneLocator } from '../../core/shared/schema.js';
-import { attributeSelector, idSelector } from '../../core/content/escape.js';
+import { pruneLocator } from '../../shared/schema.js';
+import { attributeSelector, idSelector } from '../../content/escape.js';
 import { SESSION_URL_PARAMS } from './selectors.js';
 
 // ─────────────────────────────────────────────────────────────────────────────

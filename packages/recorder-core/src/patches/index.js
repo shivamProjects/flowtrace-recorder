@@ -7,12 +7,12 @@
  * keeps the dependency arrow pointing one way.
  */
 
-import { DEFAULT_PATCH_ID, normalisePatch } from '../core/shared/patch-api.js';
+import { DEFAULT_PATCH_ID, normalisePatch } from '../shared/patch-api.js';
 import genericPatch from './generic/index.js';
 import oraclePatch from './oracle/index.js';
 import ibmPatch from './ibm/index.js';
 
-/** @type {Record<string, import('../core/shared/patch-api.js').Patch>} */
+/** @type {Record<string, import('../shared/patch-api.js').Patch>} */
 const REGISTRY = {
   generic: normalisePatch(genericPatch),
   oracle: normalisePatch(oraclePatch),

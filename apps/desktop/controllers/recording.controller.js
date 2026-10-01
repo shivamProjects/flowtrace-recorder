@@ -3,14 +3,14 @@
  * Handles Playwright recording operations
  */
 
-const CodegenRecorder = require('../codegen-recorder');
+const DesktopRecorder = require('../src/desktop-recorder');
 const ApiResponse = require('../utils/responses');
 const LoggerService = require('../services/logger.service');
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://nitro:3050';
 
 // Create a single recorder instance
-const recorder = new CodegenRecorder();
+const recorder = new DesktopRecorder();
 
 class RecordingController {
   

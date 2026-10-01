@@ -14,6 +14,9 @@
     "build:mac": "node scripts/build.js --mac"
   },
   "dependencies": {
+    "@flowtrace/contracts": "workspace:*",
+    "@flowtrace/recorder-core": "workspace:*",
+    "@flowtrace/recorder-host": "workspace:*",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
     "dotenv": "^17.3.1",

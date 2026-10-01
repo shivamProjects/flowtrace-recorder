@@ -13,8 +13,8 @@
  * threw a DOMException out of the click handler and lost the interaction.
  */
 
-import { cleanLabel } from '../../core/content/dom.js';
-import { cssAttributeValue } from '../../core/content/escape.js';
+import { cleanLabel } from '../../content/dom.js';
+import { cssAttributeValue } from '../../content/escape.js';
 import { FIELD_WRAPPER } from './selectors.js';
 
 /**

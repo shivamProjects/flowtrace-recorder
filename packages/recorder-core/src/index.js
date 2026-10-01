@@ -22,6 +22,16 @@ export * from './content/dom.js';
 export * from './content/escape.js';
 export * from './content/required.js';
 export * from './content/capture.js';
+export * as bus from './content/bus.js';
+
+export * from './page/page-recorder.js';
+export * from './compiler/compiler.js';
+export * from './correlation/surface-registry.js';
+export * from './correlation/effect-correlator.js';
+export * from './correlation/dedup.js';
+export * from './bridge/file-capture.js';
+export * from './bridge/frame-registry.js';
+export * from './evidence/geometry.js';
 
 export * from './shared/schema.js';
 export * from './shared/patch-api.js';
@@ -31,3 +41,4 @@ export * from './shared/types.js';
 
 export * from './components/registry.js';
 export * from './patches/index.js';
+

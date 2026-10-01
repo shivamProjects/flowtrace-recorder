@@ -26,7 +26,7 @@
  * to their host component, and produces semantic, durable `selectOption` and `fill` actions.
  */
 
-import { cleanText } from '../../core/content/dom.js';
+import { cleanText } from '../../content/dom.js';
 
 /** Selectors matching Oracle Redwood / JET host elements. */
 export const REDWOOD_HOST_SELECTORS = [
