@@ -1,20 +1,25 @@
 /**
- * focus-state.js — observational active target tracking without step noise.
+ * focus-state.js — observational active target tracking with snapshot provenance.
  *
  * Tracks the currently active/focused element and boundary transitions across focusin/focusout.
  * Focus changes do NOT emit noisy focus/blur recorded steps into the workflow, but supply
- * provenance for subsequent input, keyboard, and file interactions and trigger clean fill flushes.
+ * provenance snapshots for subsequent input, keyboard, and file interactions and trigger clean fill flushes.
  */
+
+import { takeTargetSnapshot } from '../targeting/target-snapshot.js';
 
 export class FocusState {
   /**
    * @param {Object} [options]
-   * @param {Function} [options.onFocusChange]  callback(newActive, oldActive)
+   * @param {Function} [options.onFocusChange]  callback(newSnapshot, oldSnapshot)
    * @param {Function} [options.flushPendingFills] callback to flush pending input
    */
   constructor(options = {}) {
     this._activeElement = null;
     this._previousElement = null;
+    this._activeSnapshot = null;
+    this._previousSnapshot = null;
+    this._generation = 0;
     this._lastFocusTime = 0;
     this._onFocusChange = options.onFocusChange || (() => {});
     this._flushPendingFills = options.flushPendingFills || (() => {});
@@ -30,8 +35,13 @@ export class FocusState {
 
     if (this._activeElement !== target) {
       const oldActive = this._activeElement;
+      const oldSnapshot = this._activeSnapshot;
+
       this._previousElement = oldActive;
+      this._previousSnapshot = oldSnapshot;
       this._activeElement = target;
+      this._activeSnapshot = takeTargetSnapshot(target);
+      this._generation++;
       this._lastFocusTime = Date.now();
 
       // If moving away from an editable input, flush any pending fills
@@ -39,7 +49,7 @@ export class FocusState {
         this._flushPendingFills(target);
       }
 
-      this._onFocusChange(this._activeElement, oldActive);
+      this._onFocusChange(this._activeSnapshot, oldSnapshot);
     }
   }
 
@@ -54,11 +64,27 @@ export class FocusState {
       setTimeout(() => {
         if (this._activeElement === target) {
           this._previousElement = target;
+          this._previousSnapshot = this._activeSnapshot;
           this._activeElement = null;
+          this._activeSnapshot = null;
           this._flushPendingFills();
         }
       }, 0);
     }
+  }
+
+  /**
+   * @returns {import('../targeting/target-snapshot.js').TargetSnapshot|null}
+   */
+  getActiveSnapshot() {
+    return this._activeSnapshot;
+  }
+
+  /**
+   * @returns {import('../targeting/target-snapshot.js').TargetSnapshot|null}
+   */
+  getPreviousSnapshot() {
+    return this._previousSnapshot;
   }
 
   /**
@@ -78,6 +104,13 @@ export class FocusState {
   /**
    * @returns {number}
    */
+  getGeneration() {
+    return this._generation;
+  }
+
+  /**
+   * @returns {number}
+   */
   getLastFocusTime() {
     return this._lastFocusTime;
   }
@@ -88,6 +121,9 @@ export class FocusState {
   reset() {
     this._activeElement = null;
     this._previousElement = null;
+    this._activeSnapshot = null;
+    this._previousSnapshot = null;
+    this._generation = 0;
     this._lastFocusTime = 0;
   }
 }

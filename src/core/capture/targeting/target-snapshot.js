@@ -4,6 +4,10 @@
  * Captures tagName, role, label, values, geometry, and attributes immediately
  * upon interaction so subsequent DOM mutations, async operations, or removals
  * do not lose provenance.
+ *
+ * Invariants:
+ * 1. True immutability: Contains no live DOM Element references.
+ * 2. Credential safety: Never reads value for sensitive / password fields.
  */
 
 import { roleOf, resolveLabel, cleanText } from '../../content/dom.js';
@@ -17,7 +21,7 @@ const geometryCapture = new GeometryCapture();
 
 /**
  * @typedef {Object} TargetSnapshot
- * @property {Element} element
+ * @property {string} targetId
  * @property {string} tagName
  * @property {string|null} inputType
  * @property {string|null} role
@@ -51,7 +55,8 @@ export function takeTargetSnapshot(el, options = {}) {
     ...selector.raw,
   };
 
-  if (isSensitiveField(el)) {
+  const isSensitive = isSensitiveField(el) || meta.sensitive === true;
+  if (isSensitive) {
     meta.sensitive = true;
   }
 
@@ -73,8 +78,9 @@ export function takeTargetSnapshot(el, options = {}) {
   const tagName = el.tagName ? el.tagName.toLowerCase() : 'unknown';
   const inputType = el.tagName === 'INPUT' ? (el.getAttribute('type') || 'text').toLowerCase() : null;
 
+  // Credential safety invariant: NEVER read or store raw value for sensitive fields!
   let value = null;
-  if ('value' in el && typeof el.value === 'string') {
+  if (!isSensitive && 'value' in el && typeof el.value === 'string') {
     value = el.value;
   }
 
@@ -84,7 +90,7 @@ export function takeTargetSnapshot(el, options = {}) {
   }
 
   return {
-    element: el,
+    targetId: selector.selector,
     tagName,
     inputType,
     role: roleOf(el),

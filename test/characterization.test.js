@@ -171,6 +171,30 @@ describe('RecordActionTool Forensic Extraction Characterization Suite', () => {
       expect(emitted[0].button).toBe('right');
     });
 
+    it('enriches clicks and double-clicks with mouse modifiers and coordinates', () => {
+      const emitted = [];
+      const correlator = new ClickCorrelator({
+        emit: (ev) => emitted.push(ev),
+        delayMs: 200,
+      });
+
+      const button = document.createElement('button');
+      document.body.appendChild(button);
+      const makeEvent = (type, el, extra) => ({ type, ...extra });
+
+      // Shift+Click at (150, 220)
+      correlator.onClick(
+        button,
+        { button: 0, shiftKey: true, clientX: 150.4, clientY: 220.1 },
+        makeEvent
+      );
+      correlator.flush();
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].modifiers).toEqual({ shift: true });
+      expect(emitted[0].position).toEqual({ x: 150, y: 220 });
+    });
+
     it('flushes pending click immediately when flush() is invoked', () => {
       const emitted = [];
       const correlator = new ClickCorrelator({
@@ -404,6 +428,31 @@ describe('RecordActionTool Forensic Extraction Characterization Suite', () => {
       const blurHandled = selectCapture.onBlur(select, { target: select });
       expect(blurHandled).toBe(false);
       expect(emitted.length).toBe(1); // No double emission
+    });
+
+    it('ignores passive focus navigation and does not arm same-value blur emission', () => {
+      const emitted = [];
+      const selectCapture = new NativeSelectCapture({
+        emit: (ev) => emitted.push(ev),
+        makeEvent: (type, el, extra) => ({ type, tagName: el.tagName, ...extra }),
+      });
+
+      document.body.innerHTML = `
+        <select id="currency">
+          <option value="USD" selected>US Dollar</option>
+          <option value="EUR">Euro</option>
+        </select>
+      `;
+
+      const select = document.getElementById('currency');
+      
+      // Passive focus navigation (e.g. user tabbed through the field)
+      selectCapture.onTouch(select, { type: 'focus', target: select });
+
+      // Blur fires as user tabs away
+      const blurHandled = selectCapture.onBlur(select, { type: 'blur', target: select });
+      expect(blurHandled).toBe(false);
+      expect(emitted.length).toBe(0); // Nothing emitted!
     });
   });
 

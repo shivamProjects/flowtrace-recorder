@@ -18,12 +18,16 @@ export class NativeSelectCapture {
   }
 
   /**
-   * Called when a pointerdown/mousedown/focus occurs on a <select> or <option>.
+   * Called when a pointerdown/mousedown/click/touch occurs on a <select> or <option>.
    * @param {Element} target
-   * @param {Event} event
+   * @param {Event} [event]
    */
   onTouch(target, event) {
     if (!target) return;
+    // Passive focus navigation (e.g. Tab navigation) must not arm same-value blur emission
+    if (event && ['focus', 'focusin'].includes(event.type)) {
+      return;
+    }
     const select = target.tagName === 'SELECT' ? target : target.closest?.('select');
     if (!select) return;
 

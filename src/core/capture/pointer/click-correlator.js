@@ -7,6 +7,28 @@
  * cancelled and a single `dblclick` action is emitted.
  */
 
+function extractModifiers(event) {
+  if (!event) return undefined;
+  const mods = {};
+  if (event.altKey) mods.alt = true;
+  if (event.ctrlKey) mods.control = true;
+  if (event.metaKey) mods.meta = true;
+  if (event.shiftKey) mods.shift = true;
+  return Object.keys(mods).length > 0 ? mods : undefined;
+}
+
+function extractPosition(event) {
+  if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return undefined;
+  return { x: Math.round(event.clientX), y: Math.round(event.clientY) };
+}
+
+function resolveButton(event) {
+  if (!event || typeof event.button !== 'number') return undefined;
+  if (event.button === 2) return 'right';
+  if (event.button === 1) return 'middle';
+  return 'left';
+}
+
 export class ClickCorrelator {
   /**
    * @param {Object} options
@@ -30,12 +52,18 @@ export class ClickCorrelator {
    * @param {Object} [extraPayload]
    */
   onClick(target, event, makeEventFn, extraPayload = {}) {
+    const modifiers = extractModifiers(event);
+    const position = extractPosition(event);
+    const button = resolveButton(event);
+
     // If a right-click or middle-click triggered this, emit immediately with button
-    if (event.button === 2) {
+    if (button === 'right' || button === 'middle') {
       this.flush();
       const ev = makeEventFn('click', target, {
-        button: 'right',
+        button,
         clickCount: 1,
+        ...(modifiers ? { modifiers } : {}),
+        ...(position ? { position } : {}),
         ...extraPayload,
       });
       this._emit(ev);
@@ -62,6 +90,9 @@ export class ClickCorrelator {
 
     const eventPayload = makeEventFn('click', target, {
       clickCount: 1,
+      ...(button && button !== 'left' ? { button } : {}),
+      ...(modifiers ? { modifiers } : {}),
+      ...(position ? { position } : {}),
       ...extraPayload,
     });
 
@@ -86,8 +117,15 @@ export class ClickCorrelator {
       this._pendingClick = null;
     }
 
+    const modifiers = extractModifiers(event);
+    const position = extractPosition(event);
+    const button = resolveButton(event);
+
     const ev = makeEventFn('dblclick', target, {
       clickCount: 2,
+      ...(button && button !== 'left' ? { button } : {}),
+      ...(modifiers ? { modifiers } : {}),
+      ...(position ? { position } : {}),
       ...extraPayload,
     });
     this._emit(ev);
@@ -102,9 +140,14 @@ export class ClickCorrelator {
    */
   onContextMenu(target, event, makeEventFn, extraPayload = {}) {
     this.flush();
+    const modifiers = extractModifiers(event);
+    const position = extractPosition(event);
+
     const ev = makeEventFn('click', target, {
       button: 'right',
       clickCount: 1,
+      ...(modifiers ? { modifiers } : {}),
+      ...(position ? { position } : {}),
       ...extraPayload,
     });
     this._emit(ev);

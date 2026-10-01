@@ -291,6 +291,37 @@ function buildContext() {
   };
 }
 
+function evaluateAdapterObservation(type, target, event) {
+  if (!patch) return { kind: 'pass' };
+
+  // 1. Unified ComponentAdapter observe() model
+  if (typeof patch.observe === 'function') {
+    const observation = { type, target, event };
+    const decision = safeInvoke(`${patch.id}.observe`, patch.observe, { kind: 'pass' }, observation, ctx);
+    if (decision && typeof decision === 'object' && decision.kind) {
+      return decision;
+    }
+  }
+
+  // 2. Legacy patch hook fallback
+  if (type === 'click') {
+    const claimed = safeInvoke(`${patch.id}.onClick`, patch.capture?.onClick, false, target, event, ctx);
+    if (claimed === true) return { kind: 'claim', candidate: null };
+  } else if (type === 'dblclick') {
+    const claimed = safeInvoke(`${patch.id}.onDoubleClick`, patch.capture?.onDoubleClick, false, target, event, ctx);
+    if (claimed === true) return { kind: 'claim', candidate: null };
+  } else if (type === 'contextmenu') {
+    const claimed = safeInvoke(`${patch.id}.onContextMenu`, patch.capture?.onContextMenu, false, target, event, ctx);
+    if (claimed === true) return { kind: 'claim', candidate: null };
+  } else if (type === 'input') {
+    safeInvoke(`${patch.id}.onInput`, patch.capture?.onInput, undefined, target, event, ctx);
+  } else if (type === 'change') {
+    safeInvoke(`${patch.id}.onChange`, patch.capture?.onChange, undefined, target, event, ctx);
+  }
+
+  return { kind: 'pass' };
+}
+
 // ── handlers ────────────────────────────────────────────────────────────────
 
 function onClick(e) {
@@ -305,14 +336,19 @@ function onClick(e) {
 
   if (fileCapture) fileCapture.recordInitiator(target);
 
-  // The patch gets first refusal. Returning true means it has already emitted
-  // something more accurate than a generic click — an LOV row selection, a date
-  // fill — and the core must not also emit.
-  const claimed = safeInvoke(`${patch.id}.onClick`, patch.capture.onClick, false, target, e, ctx);
-  if (claimed === true) {
+  const decision = evaluateAdapterObservation('click', target, e);
+  if (decision.kind === 'ignore') {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
+  if (decision.kind === 'claim') {
+    if (clickCorrelator) clickCorrelator.cancel();
+    if (decision.candidate) {
+      send(decision.candidate);
+    }
+    return;
+  }
+  const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
 
   if (isCheckboxLike(target)) {
     if (clickCorrelator) clickCorrelator.flush();
@@ -337,9 +373,9 @@ function onClick(e) {
   const interactive = retargetToInteractive(target);
   const el = interactive || target;
   if (clickCorrelator) {
-    clickCorrelator.onClick(el, e, makeEvent);
+    clickCorrelator.onClick(el, e, makeEvent, augmentPayload);
   } else {
-    send(makeEvent('click', el));
+    send(makeEvent('click', el, augmentPayload));
   }
 }
 
@@ -351,20 +387,28 @@ function onDoubleClick(e) {
 
   flushPendingFills(target);
 
-  const claimed = safeInvoke(`${patch.id}.onDoubleClick`, patch.capture.onDoubleClick, false, target, e, ctx);
-  if (claimed === true) {
+  const decision = evaluateAdapterObservation('dblclick', target, e);
+  if (decision.kind === 'ignore') {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
+  if (decision.kind === 'claim') {
+    if (clickCorrelator) clickCorrelator.cancel();
+    if (decision.candidate) {
+      send(decision.candidate);
+    }
+    return;
+  }
+  const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
 
   if (isCheckboxLike(target) || target.tagName === 'SELECT') return;
 
   const interactive = retargetToInteractive(target);
   const el = interactive || target;
   if (clickCorrelator) {
-    clickCorrelator.onDoubleClick(el, e, makeEvent);
+    clickCorrelator.onDoubleClick(el, e, makeEvent, augmentPayload);
   } else {
-    send(makeEvent('dblclick', el, { clickCount: 2 }));
+    send(makeEvent('dblclick', el, { clickCount: 2, ...augmentPayload }));
   }
 }
 
@@ -376,18 +420,26 @@ function onContextMenu(e) {
 
   flushPendingFills(target);
 
-  const claimed = safeInvoke(`${patch.id}.onContextMenu`, patch.capture.onContextMenu, false, target, e, ctx);
-  if (claimed === true) {
+  const decision = evaluateAdapterObservation('contextmenu', target, e);
+  if (decision.kind === 'ignore') {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
+  if (decision.kind === 'claim') {
+    if (clickCorrelator) clickCorrelator.cancel();
+    if (decision.candidate) {
+      send(decision.candidate);
+    }
+    return;
+  }
+  const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
 
   const interactive = retargetToInteractive(target);
   const el = interactive || target;
   if (clickCorrelator) {
-    clickCorrelator.onContextMenu(el, e, makeEvent);
+    clickCorrelator.onContextMenu(el, e, makeEvent, augmentPayload);
   } else {
-    send(makeEvent('click', el, { button: 'right', clickCount: 1 }));
+    send(makeEvent('click', el, { button: 'right', clickCount: 1, ...augmentPayload }));
   }
 }
 
@@ -400,9 +452,6 @@ function onKeyDown(e) {
 function onFocusIn(e) {
   if (focusState) {
     focusState.onFocusIn(e);
-  }
-  if (nativeSelectCapture && e.target) {
-    nativeSelectCapture.onTouch(e.target, e);
   }
 }
 
@@ -421,14 +470,14 @@ function onInput(e) {
   if (!target) return;
 
   if (contentEditableCapture && contentEditableCapture.isEditable(target)) {
-    safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
+    evaluateAdapterObservation('input', target, e);
     const key = generateSelector(target)?.selector;
     contentEditableCapture.onInput(target, e, key, bus.guard());
     return;
   }
 
   if (rangeCapture && rangeCapture.isRange(target)) {
-    safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
+    evaluateAdapterObservation('input', target, e);
     const key = generateSelector(target)?.selector;
     rangeCapture.onInput(target, e, key, bus.guard());
     return;
@@ -439,7 +488,7 @@ function onInput(e) {
   const type = (target.getAttribute('type') || '').toLowerCase();
   if (type === 'checkbox' || type === 'radio' || type === 'file') return;
 
-  safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
+  evaluateAdapterObservation('input', target, e);
 
   // Emit one fill per pause rather than one per keystroke.
   const key = generateSelector(target).selector;
@@ -475,7 +524,7 @@ function onChange(e) {
     entry.flush();
   }
 
-  safeInvoke(`${patch.id}.onChange`, patch.capture.onChange, undefined, target, e, ctx);
+  evaluateAdapterObservation('change', target, e);
 
   if (target.tagName === 'SELECT') {
     if (nativeSelectCapture) {
