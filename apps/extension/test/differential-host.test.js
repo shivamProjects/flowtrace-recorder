@@ -6,6 +6,7 @@ import {
   compileSteps,
   dedupEvents,
   getPatch,
+  getLovMetadata,
   buildRecordingEnvelope,
 } from '@flowtrace/recorder-core';
 import { RecordingEnvelopeSchema, SemanticStepV2Schema } from '@flowtrace/contracts';
@@ -262,4 +263,107 @@ describe('TRACE-64 Real Two-Host Differential Suite: ExtensionHost vs DesktopHos
       expect(stopped).toBe(true);
     });
   });
+
+  describe('4. Redwood & ADF Complex Component Differential Execution', () => {
+    const ORACLE_FIXTURE_HTML = `<!DOCTYPE html>
+    <html>
+      <head><title>Oracle Fusion Expense Report</title></head>
+      <body>
+        <div class="form-container">
+          <oj-c-select-single id="expenseCategory" label-hint="Expense Category" aria-expanded="true">
+            <div class="oj-select-input-container">
+              <input type="text" class="oj-select-input" value="Travel" />
+            </div>
+          </oj-c-select-single>
+          
+          <div id="pt1:r1:merchantLov" class="af_inputListOfValues">
+            <label for="pt1:r1:merchantLov::content">Merchant</label>
+            <input id="pt1:r1:merchantLov::content" role="combobox" type="text" value="Hilton" />
+            <a id="pt1:r1:merchantLov::lovIconId" class="af_inputListOfValues_search-icon" href="#"></a>
+            <div id="pt1:r1:merchantLovlovPopupId" class="af_dialog"></div>
+          </div>
+        </div>
+
+        <div class="oj-listbox-drop" data-oj-container-for="expenseCategory">
+          <ul role="listbox">
+            <li role="option" class="oj-listbox-result" data-oj-value="MEALS">
+              <div class="oj-listbox-result-label">Meals & Entertainment</div>
+            </li>
+          </ul>
+        </div>
+      </body>
+    </html>`;
+
+    it('emits identical SemanticStepV2 actions for Redwood custom element dropdowns on Extension and Desktop', () => {
+      const extEvents = [];
+      const deskEvents = [];
+
+      const domExtOracle = new JSDOM(ORACLE_FIXTURE_HTML, { url: 'https://fusion.oraclecloud.test/expenses' });
+      const domDeskOracle = new JSDOM(ORACLE_FIXTURE_HTML, { url: 'https://fusion.oraclecloud.test/expenses' });
+
+      // Host 1: Extension
+      const extRecorder = new PageRecorder({
+        window: domExtOracle.window,
+        document: domExtOracle.window.document,
+        patchId: 'oracle',
+        onEvent: (ev) => extEvents.push(ev),
+      });
+      globalThis.window = domExtOracle.window;
+      globalThis.document = domExtOracle.window.document;
+      extRecorder.start('oracle');
+
+      const extOption = domExtOracle.window.document.querySelector('li[data-oj-value="MEALS"]');
+      extOption.dispatchEvent(new domExtOracle.window.MouseEvent('click', { bubbles: true }));
+      extRecorder.stop();
+
+      // Host 2: Desktop
+      const deskRecorder = new PageRecorder({
+        window: domDeskOracle.window,
+        document: domDeskOracle.window.document,
+        patchId: 'oracle',
+        onEvent: (ev) => deskEvents.push(ev),
+      });
+      globalThis.window = domDeskOracle.window;
+      globalThis.document = domDeskOracle.window.document;
+      deskRecorder.start('oracle');
+
+      const deskOption = domDeskOracle.window.document.querySelector('li[data-oj-value="MEALS"]');
+      deskOption.dispatchEvent(new domDeskOracle.window.MouseEvent('click', { bubbles: true }));
+      deskRecorder.stop();
+
+      expect(extEvents.length).toBeGreaterThan(0);
+      expect(deskEvents.length).toBe(extEvents.length);
+
+      const extAction = extEvents[0];
+      const deskAction = deskEvents[0];
+
+      expect(extAction.type).toBe(deskAction.type);
+      expect(extAction.value).toBe(deskAction.value);
+      expect(extAction.label).toBe(deskAction.label);
+    });
+
+    it('emits identical ADF LOV step metadata across both hosts', () => {
+      const domExtOracle = new JSDOM(ORACLE_FIXTURE_HTML, { url: 'https://fusion.oraclecloud.test/expenses' });
+      const domDeskOracle = new JSDOM(ORACLE_FIXTURE_HTML, { url: 'https://fusion.oraclecloud.test/expenses' });
+
+      const extInput = domExtOracle.window.document.getElementById('pt1:r1:merchantLov::content');
+      const deskInput = domDeskOracle.window.document.getElementById('pt1:r1:merchantLov::content');
+
+      const extPatch = getPatch('oracle');
+      const deskPatch = getPatch('oracle');
+
+      const extMeta = extPatch.resolve.meta ? extPatch.resolve.meta(extInput) : {};
+      const deskMeta = deskPatch.resolve.meta ? deskPatch.resolve.meta(deskInput) : {};
+
+      expect(extMeta).toEqual(deskMeta);
+      expect(extMeta.hasLovIcon).toBe(true);
+      expect(extMeta.componentId).toBe('pt1:r1:merchantLov');
+
+      const extLovData = getLovMetadata(extInput);
+      const deskLovData = getLovMetadata(deskInput);
+      expect(extLovData).toEqual(deskLovData);
+      expect(extLovData.lovKind).toBe('modal');
+    });
+  });
 });
+
