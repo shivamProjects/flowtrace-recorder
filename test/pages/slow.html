@@ -1,0 +1,11 @@
+<html><body>
+<label for="src">Transaction Source</label><input id="src">
+<label for="typ">Transaction Type</label><input id="typ" readonly>
+<div id="out"></div>
+<script>
+// ADF-ish: a click triggers an XHR-shaped delay then mutates the DOM
+document.addEventListener('click', e=>{ if(e.target.id==='go'){
+  setTimeout(()=>{document.getElementById('out').textContent='done '+Date.now();},900);}});
+</script>
+<button id="go">Save</button>
+</body></html>

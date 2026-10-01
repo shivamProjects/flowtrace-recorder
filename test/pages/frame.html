@@ -1,0 +1,21 @@
+<html><body>
+<!--
+  Frame routing fixture.
+
+  The TOP document deliberately carries a "Business Unit" field of its own,
+  holding a value nothing in these cases ever types. That is the whole point: if
+  the engine ever falls back to the top frame when it cannot find the recorded
+  one, it will find a control answering to the same label, fill it, and report
+  success. The cases assert this field is still untouched afterwards, so a silent
+  fallback shows up as a failure here rather than as a wrong record in Oracle.
+-->
+<label for="bu">Business Unit</label><input id="bu" value="TOP FRAME DECOY">
+
+<iframe id="adfDialog" name="adfDialog" title="Create Transaction" src="frame-inner.html"
+        style="width:600px;height:220px"></iframe>
+
+<!-- A second frame, so "find the frame" is a real choice rather than the only
+     option, and so an ambiguous selector would be caught. -->
+<iframe id="sideRegion" name="sideRegion" title="Side Region" src="frame-other.html"
+        style="width:600px;height:220px"></iframe>
+</body></html>

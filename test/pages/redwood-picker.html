@@ -1,0 +1,34 @@
+<html><head>
+<style>
+  /* Geometry only. JET sizes rows via its own stylesheet; without a size the
+     engine's painted check (width>1 && height>1) rejects every row. */
+  .oj-listview-item { display: block; min-height: 22px; padding: 3px 8px; }
+  .oj-listview-cell-element { display: block; min-height: 18px; }
+</style>
+</head><body>
+<!--
+  Oracle Redwood (JET) — Create Sales Order, the Sales Channel picker with its
+  list OPEN. Captured live from ibqwjb-test on 2026-08-25 by _out/redwood-probe.js
+  and cut out with scripts/extract-element.js. Oracle's markup, unmodified.
+
+  Why this matters (recording 1629 / script 2326):
+
+  Each row offers three addresses —
+      <li id="ui-id-64" role="row">          a jQuery-UI counter, per page load
+        <div role="gridcell">                 STABLE
+          <oj-highlight-text text="Direct">   the value, as an attribute
+            <span>Direct</span>               STABLE text
+
+  The recorder chose the FIRST: css=#ui-id-194. That id is dead on the next
+  load, and because the selector carries no text the step was saved with
+  originalValue: null — so the parameter map showed Sales Channel as empty.
+
+  The same recording proves the fix works: "Select Order Type" happened to be
+  captured as internal:role=gridcell[name="Commercial Sale"i] and DID keep its
+  value. Same page, same widget family, different selector strategy.
+-->
+
+<!-- Sales Channel listview, list open
+     captured from sales-channel-open.html — Oracle's markup, unmodified -->
+<ul data-oj-internal="" aria-label="" aria-labelledby="oj-selectsingle-12-labelled-by" id="ui-id-62" class="oj-listview-element oj-component-initnode" data-oj-context="" tabindex="0" x-ms-format-detection="none" aria-multiselectable="false" role="grid" aria-rowcount="3" style="opacity: 1;"><li id="ui-id-64" role="row" class="oj-listview-focused-element oj-listview-item-element oj-listview-item oj-listview-item-layout" aria-rowindex="1" style="opacity: 1;"><div role="gridcell" class="oj-listview-cell-element" aria-selected="false"><oj-highlight-text text="Direct" match-text="" class="oj-highlighttext oj-complete"><span>Direct</span></oj-highlight-text></div></li><li id="ui-id-65" role="row" class="oj-listview-focused-element oj-listview-item-element oj-listview-item oj-listview-item-layout" aria-rowindex="2" style="opacity: 1;"><div role="gridcell" class="oj-listview-cell-element" aria-selected="false"><oj-highlight-text text="Inside sales" match-text="" class="oj-highlighttext oj-complete"><span>Inside sales</span></oj-highlight-text></div></li><li id="ui-id-66" role="row" class="oj-listview-focused-element oj-listview-item-element oj-listview-item oj-listview-item-layout" aria-rowindex="3" style="opacity: 1;"><div role="gridcell" class="oj-listview-cell-element" aria-selected="false"><oj-highlight-text text="Outside sales" match-text="" class="oj-highlighttext oj-complete"><span>Outside sales</span></oj-highlight-text></div></li></ul>
+</body></html>

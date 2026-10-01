@@ -1,0 +1,48 @@
+<html><body>
+<!--
+  Oracle Fusion — Create Supplier › Address › Address Purpose.
+  Captured verbatim from ibqwjb-test on 2026-08-25; the ids, classes and
+  nesting are Oracle's, not ours.
+
+  Two things about this shape drive the cases in run.mjs:
+
+  1. The caption is a SIBLING <label>, not a wrapper — the <input> comes first
+     and the text follows it inside <span class="xxz">. A step recorded as
+     internal:text="Ordering" therefore resolves the LABEL, never the input.
+
+  2. Those labels DO carry `for`, so the browser forwards a caption click to
+     the control and a plain .click() ticks the box. That is worth pinning:
+     an earlier fix was written on the assumption that `for` was ABSENT, which
+     was wrong. If Oracle ever ships this block without `for`, the
+     click-the-caption case here goes red and says so.
+
+  Consequence of (2) that the cases also pin: a click is a TOGGLE. Clicking a
+  ticked box unticks it, so a duplicated step or a re-run silently clears the
+  purpose and still reports green.
+-->
+<table><tbody>
+<tr class="x1x" id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2">
+  <td class="x10 x4z" valign="top"><span title="Required" class="xf">*</span><label class="af_selectManyCheckbox_label-text">Address Purpose</label></td>
+  <td valign="top" nowrap="" class="x18w">
+    <div id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2::content" name="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2" class="x2f">
+      <div><span class="xxz"><input class="x17c" type="checkbox" name="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2" id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_0" value="0" onclick="this.focus()"><label for="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_0" class="x2m">Ordering<div class="x17g"></div></label></span></div>
+      <div><span class="xxz"><input class="x17c" type="checkbox" name="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2" id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_1" value="1" onclick="this.focus()"><label for="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_1" class="x2m">Remit to<div class="x17g"></div></label></span></div>
+      <div><span class="xxz"><input class="x17c" type="checkbox" name="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2" id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_2" value="2" onclick="this.focus()"><label for="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2:_2" class="x2m">RFQ or Bidding<div class="x17g"></div></label></span></div>
+    </div>
+    <label for="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:smc2::content" class="x9w">Address Purpose</label>
+  </td>
+</tr>
+
+<!-- A checkbox Oracle DEFAULTS ON, to pin that a replay must not clear it. -->
+<tr>
+  <td><label class="af_selectManyCheckbox_label-text">Communication</label></td>
+  <td><div><span class="xxz"><input class="x17c" type="checkbox" id="comm:_0" checked><label for="comm:_0" class="x2m">Email Invoices<div class="x17g"></div></label></span></div></td>
+</tr>
+
+<!-- Plain text input, so a fill step on this page has somewhere to land. -->
+<tr>
+  <td><label class="x2sz" for="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:it49::content">Email</label></td>
+  <td><input id="pt1:_FOr1:1:_FONSr2:0:MAt2:1:AP1:it49::content" class="x25" type="text" aria-live="off"></td>
+</tr>
+</tbody></table>
+</body></html>

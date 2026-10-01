@@ -1,0 +1,46 @@
+<html><head>
+<style>
+  /* Geometry only — JET sizes these via its own stylesheet, and a zero-height
+     cell is correctly rejected by the engine's painted check. */
+  td.oj-table-data-cell { display: table-cell; min-height: 20px; padding: 4px 8px; }
+  table.oj-table-element { border-collapse: collapse; }
+</style>
+</head><body>
+<!--
+  Oracle Redwood — Create Sales Order, the BUSINESS UNIT picker, list open.
+  Captured live from ibqwjb-test on 2026-08-26 by _out/probe-bu.js.
+  Oracle's markup, unmodified.
+
+  THIS IS A DIFFERENT WIDGET FROM redwood-picker.html, and the difference is the
+  whole bug. Sales Channel is an oj-listview; Business Unit is an oj-TABLE:
+
+                      Sales Channel (records fine)   Business Unit (loses value)
+      component       oj-listview                    oj-table
+      container       ul[role=grid]                  table[role=application]
+      row             li[role=row]                   tr          (NO role)
+      cell            div[role=gridcell]             td          (NO role)
+      popup wrapper   matched by POPUP_SEL           div.oj-listbox-drop[role=presentation]
+
+  Two independent failures follow, and either alone loses the value:
+
+    1. insidePopup() is FALSE. POPUP_SEL has no entry matching
+       `.oj-listbox-drop` / `[role=presentation]`, so the click never takes the
+       popup branch in oracle-patch.js.
+
+    2. recordClickField()'s closest() finds NOTHING. Its list asks for
+       [role=gridcell] / [role=cell] / [role=row]; this markup carries none of
+       them, so no target is resolved and the record is dropped.
+
+  The id tail is genuinely stable — `1250645336` is McGrath RentCorp's row data
+  key across recordings 1629, 1631, 1632 and 1633, four separate sessions. Only
+  the `_ojNNN` prefix rotates.
+
+  The value is present and addressable: it is the <td>'s own text.
+-->
+
+<div id="lovDropdown_oj-select-bu_layer" role="presentation" class="oj-listbox-drop-layer">
+<div id="lovDropdown_oj-select-bu" class="oj-listbox-drop oj-listbox-searchselect">
+<table data-oj-internal="" class="oj-table-element oj-component-initnode" role="application" tabindex="0" aria-labelledby="" x-ms-format-detection="none" style="width: 340px; table-layout: fixed;"> <colgroup class="oj-table-colgroup"><col class="oj-table-col" style="width: 340px;"></colgroup><tbody class="oj-table-body" data-oj-container="ojTable" data-oj-context=""><tr class="oj-table-body-row"><td class="oj-table-data-cell oj-form-control-inherit" id="_oj683_table:1366046988_0">Enviroplex, Inc.</td></tr><tr class="oj-table-body-row"><td class="oj-table-data-cell oj-form-control-inherit" id="_oj683_table:1366047022_0">McGrath 180 LLC</td></tr><tr class="oj-table-body-row"><td class="oj-table-data-cell oj-form-control-inherit" id="_oj683_table:1250645336_0">McGrath RentCorp</td></tr><tr class="oj-table-body-row"><td class="oj-table-data-cell oj-form-control-inherit" id="_oj683_table:1250645370_0">TRS Rentelco, Inc. (Canada)</td></tr></tbody></table>
+</div>
+</div>
+</body></html>

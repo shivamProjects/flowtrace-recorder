@@ -1,0 +1,51 @@
+<html><head>
+<style>
+  /* Geometry only — JET sizes rows via its own stylesheet, and a 0-height row
+     is correctly rejected by the engine's painted check. */
+  li[role=row] { display: block; min-height: 22px; padding: 3px 8px; }
+  div[role=gridcell] { display: block; min-height: 18px; }
+</style>
+</head><body>
+<!--
+  Oracle Redwood generated ids, in the two shapes real recordings produced.
+
+  The ids here are copied from recordings 1629 and 1631 of the same flow, made
+  ~90 minutes apart in different sessions:
+
+      rec 1629:  _oj1147_table:1250645336_0
+      rec 1631:  _oj687_table:1250645336_0
+                  ^^^^^^^^      ^^^^^^^^^^^^
+                  CHANGED       IDENTICAL
+
+  So `_ojNNN` is a per-session JET component counter and the rest — widget kind,
+  hashed row data key, row index — survives. A selector anchored on the whole id
+  is dead on the next run; one anchored on the tail is not.
+
+  The third list is a DECOY: a different widget kind hashing to the same digits.
+  It exists so the uniqueness of the suffix is actually tested rather than
+  assumed — `[id$="table:1250645336_0"]` must not match it.
+-->
+
+<ul id="_oj687_table" role="grid" aria-label="Business Unit">
+  <li id="_oj687_table:1250645336_0" role="row">
+    <div role="gridcell">McGrath RentCorp</div>
+  </li>
+  <li id="_oj687_table:1250645336_1" role="row">
+    <div role="gridcell">McGrath RentCorp International</div>
+  </li>
+</ul>
+
+<ul id="_oj806_table" role="grid" aria-label="Customer">
+  <li id="_oj806_table:-1565843364_0" role="row">
+    <div role="gridcell">J.T. Vaughn Construction, LLC</div>
+  </li>
+</ul>
+
+<!-- decoy: same digits, different widget kind -->
+<ul id="_oj999_other" role="grid" aria-label="Decoy">
+  <li id="_oj999_other:1250645336_0" role="row">
+    <div role="gridcell">Decoy row</div>
+  </li>
+</ul>
+
+</body></html>

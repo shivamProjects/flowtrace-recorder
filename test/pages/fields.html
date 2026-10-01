@@ -1,0 +1,9 @@
+<html><body>
+<label for="dt">Transaction Date</label><input id="dt" value="1-Jan-2026">
+<label for="bu">Business Unit</label><input id="bu" value="McGrath RentCorp">
+<label for="rel">Relationship</label>
+<select id="rel"><option value="1">Alpha</option><option value="2" selected>Debit memo</option></select>
+<label for="dep">Dependent</label><input id="dep" disabled>
+<script>setTimeout(()=>{document.getElementById('dep').disabled=false;},1500);</script>
+<label for="ro">Transaction Type</label><input id="ro" readonly>
+</body></html>

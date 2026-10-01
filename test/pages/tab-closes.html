@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Main</title></head>
+<body>
+<!--
+  Synthetic — engine mechanics. A tab that opens and then CLOSES itself, which
+  is what Oracle does for a print preview or a download shim. The run must end
+  up back on this page, not stranded on a dead handle.
+-->
+<h1>Main</h1>
+<a id="open" href="tab-selfclose.html" target="_blank">Open transient tab</a>
+<label for="after">After</label>
+<input id="after">
+<div id="out"></div>
+<script>
+document.getElementById('after').addEventListener('change', function () {
+  document.getElementById('out').textContent = 'After: ' + this.value;
+});
+</script>
+</body>
+</html>

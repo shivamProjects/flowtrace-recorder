@@ -1,0 +1,169 @@
+<html><head>
+<style>
+/*
+  The few rules the captured markup CANNOT do without.
+
+  Oracle's LOV search icon is an EMPTY <a class="x1o2"> sized entirely by a CSS
+  background sprite. Without a stylesheet it measures 0x0, and the engine's
+  painted-element check (width>1 && height>1, see firstPaintedIndex in
+  locators.ts) correctly rejects it — so a fixture with no CSS tests a condition
+  that never occurs on the live page, and every LOV launcher case fails for the
+  wrong reason.
+
+  Only geometry is reproduced, not Oracle's appearance. Anything beyond making
+  the elements real-sized would be inventing detail the capture does not have.
+*/
+a.x1o2 { display: inline-block; width: 16px; height: 16px; background: #ccc; }
+.x1lb  { border: 1px solid #999; background: #fff; }
+.x1hg td { padding: 2px 4px; }
+</style>
+</head><body>
+<!--
+  Oracle Fusion — Create Depreciation Method, captured live 2026-08-25 from
+  ibqwjb-test. Ids, classes and attributes are Oracle's, kept verbatim; only the
+  long `pt1:r1:0:rt:1:r2:0:dynamicRegion1:0:pt1:met1:1:ap1:` id prefix is
+  shortened to `B:` so the file stays readable. The SHAPES are what matter and
+  none of them are changed.
+
+  This page collects the widgets that have actually broken a replay, each with a
+  note on how. Add to it rather than inventing markup: every wrong diagnosis in
+  this engine so far came from reasoning about ADF from memory.
+
+  ── what is here, and why ──────────────────────────────────────────────────
+  1. selectOption whose recorded value is the option's VALUE attribute ("1"),
+     not its label. The ladder selects it correctly by value; verification that
+     compared against the LABEL then failed a step that had just worked.
+     (execution 8354, step 21)
+
+  2. An LOV dropdown as ADF really renders it: a two-column grid where the CODE
+     is one cell and the DISPLAY TEXT another, rows addressed by `_afrrk`. The
+     currently-selected row is REPEATED at the top (ORA_K appears at _afrrk 0
+     and 4) with a separator row between, so a text match can hit either copy
+     and "first match" is not "the row the operator picked".
+
+  3. Two LOV fields whose search icons are empty <a> elements sized entirely by
+     CSS background — 0x0 without the application stylesheet, so a visibility
+     check rejects them.
+
+  4. Disabled inputs a recording must never try to fill.
+-->
+
+<table><tbody>
+
+<!-- 1. Life in Years / Months: two inputs sharing one label cell -->
+<tr class="xk6" id="B:panelLabelAndMessage1">
+  <td class="x15 x4z"><span title="Required" class="xf">*</span><label class="af_panelLabelAndMessage_label-text" for="B:TransLifeInYearsId::content">Life in Years</label></td>
+  <td valign="top" class="x18w xk7">
+    <table cellpadding="0" cellspacing="0" border="0" role="presentation" class="x1a"><tbody><tr>
+      <td valign="top"><span id="B:TransLifeInYearsId" class="x1u"><input id="B:TransLifeInYearsId::content" name="B:TransLifeInYearsId" style="text-align:right;width:auto;" class="x25" size="5" autocomplete="off" type="text" value="" aria-live="off"></span></td>
+      <td valign="top"><img id="B:sp1" src="/fscmUI/adf/images/t.gif" alt="" width="5" height="0px" style="vertical-align:middle;"></td>
+      <td valign="top"><span id="B:labelForMonth" class="xq"><label for="B:TransLifeInMonthsId::content">Life in Months</label></span></td>
+      <td valign="top"><span id="B:TransLifeInMonthsId" class="x1u"><input id="B:TransLifeInMonthsId::content" name="B:TransLifeInMonthsId" style="text-align:right;width:auto;" class="x25" size="5" autocomplete="off" type="text" aria-live="off"></span></td>
+    </tr></tbody></table>
+  </td>
+</tr>
+
+<!-- 2. Disabled input — a fill here must fail loudly, never silently pass -->
+<tr class="x1u p_AFDisabled" id="B:it1">
+  <td class="xu x4z"><label class="x2sz" for="B:it1::content">Life in Periods</label></td>
+  <td valign="top" nowrap="" class="x18w"><input id="B:it1::content" name="B:it1" disabled="" style="text-align:right;width:auto;" class="x25" size="5" autocomplete="off" type="text"></td>
+</tr>
+
+<tr class="xk6" id="B:plam1">
+  <td class="x15 x4z"><span title="Required" class="xf">*</span><label class="af_panelLabelAndMessage_label-text" for="B:ProratePerYrId::content">Prorate Periods per Year</label></td>
+  <td valign="top" class="x18w xk7"><span id="B:ProratePerYrId" class="x1u"><input id="B:ProratePerYrId::content" name="B:ProratePerYrId" style="text-align:right;width:auto;" class="x25" size="5" autocomplete="off" maxlength="3" type="text" value="" aria-live="off"></span></td>
+</tr>
+
+<!-- 3. Disabled checkboxes: input first, sibling <label for=...> after -->
+<tr class="x1v p_AFDisabled" id="B:selectBooleanCheckbox3">
+  <td class="xv x4z"></td>
+  <td valign="top" nowrap="" class="x18w"><span class="x2e"><span class="xxx"><input id="B:selectBooleanCheckbox3::content" name="B:selectBooleanCheckbox3" disabled="" class="x17b" type="checkbox" value="t" onclick="this.focus()" aria-labelledby="B:selectBooleanCheckbox3::Label0"><label for="B:selectBooleanCheckbox3::content" class="x17j" id="B:selectBooleanCheckbox3::Label0">Exclude salvage value<span class="x17e"></span></label></span></span></td>
+</tr>
+<tr class="x1v p_AFDisabled" id="B:sbc1">
+  <td class="xv x4z"></td>
+  <td valign="top" nowrap="" class="x18w"><span class="x2e"><span class="xxx"><input id="B:sbc1::content" name="B:sbc1" disabled="" class="x17b" type="checkbox" value="t" onclick="this.focus()" aria-labelledby="B:sbc1::Label0"><label for="B:sbc1::content" class="x17j" id="B:sbc1::Label0">Annuity depreciation method<span class="x17e"></span></label></span></span></td>
+</tr>
+
+<!-- 4. THE selectOption FROM EXECUTION 8354.
+     Recorded as value "1"; the option's TEXT is "Depreciation Method for
+     Poland". Note it is already `selected` on load — Oracle pre-picks it. -->
+<tr class="x1z" id="B:df3_FLEX_Context">
+  <td class="x12 x4z"><span class="p_rqi"></span><label class="x2t0" for="B:df3_FLEX_Context::content">Regional Information</label></td>
+  <td valign="top" nowrap="" class="x18w">
+    <select id="B:df3_FLEX_Context::content" name="B:df3_FLEX_Context" class="x2h" title="Depreciation Method for Poland" _afov="1">
+      <option value="0" title=""> </option>
+      <option value="1" selected="" title="Depreciation Method for Poland">Depreciation Method for Poland</option>
+      <option value="2" title="Depreciation Methods for Czech Republic">Depreciation Methods for Czech Republic</option>
+    </select>
+  </td>
+</tr>
+
+<!-- 5. Two LOV fields. Their captions collide with the option label above:
+     "Depreciation Method for Poland" is BOTH an <option> text and this field's
+     <label>, so a bare text match is ambiguous across the whole form. -->
+<tr class="xpi" id="B:DeprFreq">
+  <td class="xvs x4z"><span title="Required" class="xf">*</span><label class="x2t1" for="B:DeprFreq::content">Depreciation Frequency for Poland</label></td>
+  <td valign="top" nowrap="" class="x18w"><span id="B:DeprFreq::cntnr" class="xuu" style="width:auto;"><input id="B:DeprFreq::content" name="B:DeprFreq" class="xpj" size="5" type="text" value="ORA_K" role="combobox" aria-describedby="B:DeprFreq::desc" aria-expanded="false" aria-live="off"><span id="B:DeprFreq::cntnrSpan" class="x1tk"><span class="x1o3"><a tabindex="-1" class="x1o2" id="B:DeprFreq::lovIconId" title="Search: Depreciation Frequency for Poland"></a></span></span><div id="B:DeprFreq::desc" class="p_OraHiddenLabel">Autocompletes on TAB</div></span></td>
+</tr>
+<tr class="xpi" id="B:DeprMeth">
+  <td class="xvs x4z"><span title="Required" class="xf">*</span><label class="x2t1" for="B:DeprMeth::content">Depreciation Method for Poland</label></td>
+  <td valign="top" nowrap="" class="x18w"><span id="B:DeprMeth::cntnr" class="xuu" style="width:auto;"><input id="B:DeprMeth::content" name="B:DeprMeth" class="xpj" size="5" type="text" value="ORA_J" role="combobox" aria-describedby="B:DeprMeth::desc" aria-expanded="false" aria-live="off"><span id="B:DeprMeth::cntnrSpan" class="x1tk"><span class="x1o3"><a tabindex="-1" class="x1o2" id="B:DeprMeth::lovIconId" title="Search: Depreciation Method for Poland"></a></span></span><div id="B:DeprMeth::desc" class="p_OraHiddenLabel">Autocompletes on TAB</div></span></td>
+</tr>
+
+</tbody></table>
+
+<!--
+  6. THE OPEN LOV DROPDOWN, verbatim.
+
+  Two columns: code, then display text. Rows carry `_afrrk`. The selected row
+  (ORA_K / "Quarterly.") is repeated at _afrrk=0 above a separator row, then the
+  full list follows from _afrrk=2 — so ORA_K appears TWICE and a text match on
+  "Quarterly." has two candidates in different positions.
+
+  A row-pick recorded as bare text (internal:text="Disposable.") carries no code
+  and no rank, so it can only be resolved by matching the display cell. That
+  works while the text is unique, and silently picks the wrong row the moment it
+  is not.
+-->
+<div class="x1lb" id="lovdrop" style="display:none">
+  <div id="B:DeprFreq::dropdownPopup::content">
+    <div tabindex="0" id="B:DeprFreq::dropdownPopup::dropDownContent" class="x1l9 xel" style="width:468px;height:260px;">
+      <div id="B:DeprFreq::dropdownPopup::dropDownContent::db" class="x1hf" style="position:relative;width:468px;overflow:hidden;height:260px;" _afrcolcount="2">
+        <table class="x1hg" style="table-layout:fixed;position:relative;width:468px;" cellspacing="0" _totalwidth="448" _selstate="{'0':1}" _rowcount="9" _startrow="0">
+          <colgroup span="2"><col style="width:224px;"><col style="width:244px;"></colgroup>
+          <tbody>
+            <tr _afrrk="0" class="xem p_AFSelected"><td style="width:213px;line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_K</span></td><td style="width:233px;line-height:14px;" nowrap="" class="xen"><span class="x2ey">Quarterly.</span></td></tr>
+            <tr _afrrk="1" class="xem"><td style="height:3px;" nowrap="" class="xen x1i1" _afrseparator="true"><span class="x2ey"></span>&nbsp;</td><td style="height:3px;" nowrap="" class="xen x1i1" _afrseparator="true"><span class="x2ey"></span>&nbsp;</td></tr>
+            <tr _afrrk="2" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_I</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Other.</span></td></tr>
+            <tr _afrrk="3" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_J</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Disposable.</span></td></tr>
+            <tr _afrrk="4" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_K</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Quarterly.</span></td></tr>
+            <tr _afrrk="5" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_M</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Monthly.</span></td></tr>
+            <tr _afrrk="6" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_R</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Annual.</span></td></tr>
+            <tr _afrrk="7" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_S</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Seasonal.</span></td></tr>
+            <tr _afrrk="8" class="xem"><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">ORA_X</span></td><td style="line-height:14px;" nowrap="" class="xen"><span class="x2ey">Not applicable.</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <a id="B:DeprFreq::dropdownPopup::popupsearch" class="x1o4 xmx" onclick="this.focus();return false;" href="#">Search...</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Clicking the LOV icon opens the dropdown, as ADF does. Enough behaviour for
+  // a launcher step to be checkable; nothing else about the widget is simulated.
+  document.getElementById('B:DeprFreq::lovIconId').addEventListener('click', function (e) {
+    e.preventDefault();
+    document.getElementById('lovdrop').style.display = 'block';
+  });
+  // Picking a row writes its CODE into the field, which is what Oracle stores.
+  document.querySelectorAll('#lovdrop tr[_afrrk]').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var code = tr.querySelector('td .x2ey');
+      if (!code || !code.textContent.trim()) return;
+      document.getElementById('B:DeprFreq::content').value = code.textContent.trim();
+      document.getElementById('lovdrop').style.display = 'none';
+    });
+  });
+</script>
+</body></html>

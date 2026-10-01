@@ -1,0 +1,23 @@
+<html><body>
+<!--
+  An already-open list of values, which is the situation a LEGACY `select` step
+  describes: the popup is up, and the step's job is to click one row.
+
+  Each row records that it was clicked, so "the click landed" is observable
+  rather than inferred — a `select` routed to <select> handling instead would
+  touch nothing and leave Picked empty.
+-->
+<label for="picked">Picked</label><input id="picked" readonly>
+
+<div role="listbox" style="border:1px solid #999;width:400px">
+  <div role="option" id="optManual" style="padding:8px"
+       onclick="document.getElementById('picked').value='MANUAL OTHER'">MANUAL OTHER</div>
+  <div role="option" id="optUsd" style="padding:8px"
+       onclick="document.getElementById('picked').value='USD'">USD</div>
+</div>
+
+<!-- A real <select> on the same page, so a case can pin selectOption against
+     the row-pick without needing a second fixture. -->
+<label for="rel">Relationship</label>
+<select id="rel"><option value="1">Alpha</option><option value="2" selected>Debit memo</option></select>
+</body></html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Suppliers</title></head>
+<body>
+<!--
+  Synthetic — engine mechanics, not Oracle markup. See pages/README.md.
+
+  Reproduces the shape that stalled the supplier-registration replay on Testing
+  Vision: a link that opens the next part of the flow in a NEW TAB while this
+  page stays open.
+
+  Oracle does this for whole sub-applications — on the Suppliers work area,
+  "Register Supplier" is an ordinary <a target="_blank"> pointing at the Redwood
+  registration app. The click succeeds, the form loads, and the replayer carries
+  on driving THIS page, where the form's fields do not exist.
+
+  Deliberately: the field the next step wants (Company) exists ONLY on the new
+  tab, so a run that fails to follow cannot accidentally pass.
+-->
+<h1>Overview - Suppliers</h1>
+<a id="register" href="register-form.html" target="_blank">Register Supplier</a>
+</body>
+</html>

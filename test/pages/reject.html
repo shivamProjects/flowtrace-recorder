@@ -1,0 +1,13 @@
+<html><body>
+<label for="src">Transaction Source</label><input id="src">
+<div id="dlg" role="alertdialog" style="display:none">
+  <span>Messages for this page are listed below.</span>
+  <a>Transaction Type</a><a>Business Unit</a>
+</div>
+<button id="go">Save</button>
+<script>
+// ADF renders its refusal LATE — 700ms after the click, to test the grace poll
+document.getElementById('go').addEventListener('click',()=>{
+  setTimeout(()=>{document.getElementById('dlg').style.display='block';},700);});
+</script>
+</body></html>

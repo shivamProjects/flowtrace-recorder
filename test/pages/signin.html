@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign in</title></head>
+<body>
+<!--
+  Synthetic — engine mechanics, not Oracle markup. See pages/README.md.
+
+  For the "did the login actually work?" guard. Unlike login.html, which stays
+  on the same page and only changes a <div>, this one NAVIGATES on success —
+  which is what a real IDCS sign-in does, and the only thing the guard can
+  observe.
+
+  Wrong password: stays here, and the page still looks like a sign-in screen.
+  That is the silent-green case from execution 8336 — the click succeeded, the
+  login did not, and six steps reported success against a login page.
+
+  The redirect is deliberately DELAYED. The guard polls rather than sampling
+  once, because IDCS bounces through several hops; a fixture that navigated
+  synchronously would pass even against a guard that checked too early.
+-->
+<label for="u">User Name</label><input id="u">
+<label for="p">Password</label><input id="p" type="password">
+<button id="go">Next</button>
+<div id="out"></div>
+<script>
+document.getElementById('go').addEventListener('click', function () {
+  var u = document.getElementById('u').value;
+  var p = document.getElementById('p').value;
+  if (u === 'test.user@example.com' && p === 'S3cr3t-P@ssw0rd-unicode') {
+    setTimeout(function () { location.href = 'welcome.html'; }, 700);
+  } else {
+    document.getElementById('out').textContent = 'Sign in failed';
+  }
+});
+</script>
+</body>
+</html>

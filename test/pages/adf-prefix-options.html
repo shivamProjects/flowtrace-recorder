@@ -1,0 +1,40 @@
+<!doctype html>
+<!--
+  The live ADF country dropdown, copied from the failure report that produced it:
+
+    Step 18 (Select Tax Country) failed: strict mode violation:
+      getByRole('option', { name: /United States/i }) resolved to 2 elements
+
+  Two things make this different from prefix-options.html, and both matter:
+
+    1. ADF appends the country CODE to the displayed label, so NO row's text is
+       "United States". Retrying the name as an exact accessible-name match —
+       the engine's own, application-agnostic remedy — therefore decides
+       nothing here.
+    2. The exact value IS in the DOM, on `data-afr-value`. That attribute name
+       is Oracle knowledge and must never appear in the core engine; it reaches
+       the resolver only through AppPatch.exactMatch, implemented in
+       patches/oracle.ts and null in patches/generic.ts.
+
+  The WRONG row is first in DOM order, so first-painted picks it. The marker
+  tokens are not prefixes of one another — assertText matches on substring.
+-->
+<title>ADF Prefix Options</title>
+<style>
+  ul { list-style: none; padding: 0; }
+  li { padding: 4px; border: 1px solid #ccc; cursor: pointer; }
+</style>
+
+<ul id="af_countries" role="listbox">
+  <li role="option" data-afr-value="United States Minor Outlying Islands"
+      data-afr-label="United States Minor Outlying Islands UM"
+      onclick="pick('ADF-UM')">United States Minor Outlying Islands UM</li>
+  <li role="option" data-afr-value="United States"
+      data-afr-label="United States US"
+      onclick="pick('ADF-US')">United States US</li>
+</ul>
+
+<h1 id="marker">NOTHING-PICKED</h1>
+<script>
+  function pick(token) { document.getElementById('marker').textContent = token; }
+</script>

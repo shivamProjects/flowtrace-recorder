@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Two controls, one label</title></head>
+<body>
+<!--
+  The dual-element ambiguity case, reduced.
+
+  Oracle repeats a label across a form: on Manage Depreciation Methods
+  "Depreciation Method for Poland" is the label of a field in the Regional
+  Information region AND of a separate field further down the page. Both are
+  painted, both are genuinely clickable, and nothing in the LABEL distinguishes
+  them — so first-in-document-order is a coin flip.
+
+  What DOES distinguish them is the component path the recorder captured for the
+  step. The two regions have different ADF addresses, so `componentId` names
+  exactly one of these inputs.
+
+  The second field is the one recorded here, deliberately: if the engine falls
+  back to document order it takes the first and the check fails, which is the
+  only way to prove the path was actually consulted.
+-->
+<h3>Regional Information</h3>
+<label for="pt1:_FOr1:0:r1:0:it1::content">Depreciation Method for Poland</label>
+<input id="pt1:_FOr1:0:r1:0:it1::content" value="">
+
+<h3>Asset Details</h3>
+<label for="pt1:_FOr1:1:r9:0:it1::content">Depreciation Method for Poland</label>
+<input id="pt1:_FOr1:1:r9:0:it1::content" value="">
+</body>
+</html>

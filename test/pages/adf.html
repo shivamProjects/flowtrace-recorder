@@ -1,0 +1,12 @@
+<html><body>
+<!-- ADF-style pre-rendered decoys: same names, all "visible" to Playwright -->
+<div style="position:absolute;left:-9999px"><label for="bu_a">Business Unit</label><input id="bu_a"><button id="save_a">Save</button></div>
+<div style="height:0;overflow:hidden"><label for="bu_b">Business Unit</label><input id="bu_b"><button id="save_b">Save</button></div>
+<div style="opacity:0"><label for="bu_c">Business Unit</label><input id="bu_c"><button id="save_c">Save</button></div>
+<!-- the real controls, pushed BELOW THE FOLD to prove scrolling still works -->
+<div style="height:1600px"></div>
+<label for="bu">Business Unit</label><input id="bu">
+<button id="saveAndNext">Save and Create Next</button>
+<button id="go" onclick="document.getElementById(&#39;done&#39;).textContent='Invoice INV-99201 was created'">Save</button>
+<div id="done" role="alert"></div>
+</body></html>

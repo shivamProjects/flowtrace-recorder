@@ -29,8 +29,8 @@ import { chromium } from 'playwright-core';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RECORDER_ROOT = resolve(HERE, '..');
 
-/** Verbatim DOM captures shared with the replayer's checks. */
-export const PAGES = resolve(RECORDER_ROOT, '..', 'replayer', 'checks', 'pages');
+/** Verbatim DOM captures self-contained in this repository. */
+export const PAGES = resolve(RECORDER_ROOT, 'test', 'pages');
 
 /** The built content script — what actually ships. */
 export const BUNDLE = resolve(RECORDER_ROOT, 'dist', 'content.js');

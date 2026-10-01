@@ -1,0 +1,13 @@
+<!doctype html>
+<!--
+  Oracle's post-login landing page, standing in for
+  /fscmUI/faces/FuseWelcome. Served by basename, so a case may request it under
+  a realistic path such as /fscmUI/faces/FuseWelcome.html and still reach this
+  file — which is what lets the landing-page check exercise a real pathname.
+
+  The marker is deliberately unique and NOT a substring of any other fixture's:
+  assertText matches on substring, so overlapping markers would let a case pass
+  while sitting on the wrong page — the exact failure these cases exist to catch.
+-->
+<title>Fuse Welcome</title>
+<h1 id="marker">FUSE-LANDING</h1>

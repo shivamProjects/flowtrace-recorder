@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ADF message dialog (d1::msgDlg) — Error variant</title>
+<!--
+  VERBATIM capture. Do not tidy.
+
+  Source : exsp-dev33.ds-fa.oraclepdemos.com, Receivables > Billing >
+           Create Transaction, the message dialog raised on Save and Close.
+  Date   : 2026-09-09
+  Via    : scripted Playwright probe, document.querySelector('[id$="::msgDlg"]').outerHTML
+
+  This run hit the ERROR variant ("You can't update the ship-to customer site
+  on this transaction. (AR-856788)") because the probe skipped the Ship-to Site
+  step. The container is the same one used for Information / Warning /
+  Confirmation -- ADF reuses a single `d1::msgDlg` and swaps the title text and
+  the wrapper class -- so the structure here is the structure for all of them.
+  Only `::_ttxt` and the `p_AFError` class distinguish the kinds.
+
+  WHY THIS FIXTURE EXISTS -- measured on the same page, same moment:
+
+    document.querySelectorAll('[role="dialog"],[role="alertdialog"]')  -> 0
+    document.querySelectorAll('dialog')                                -> 0
+    document.querySelectorAll(':modal')                                -> 0   (supported, matched nothing)
+
+  So NONE of Playwright's dialog affordances can see this thing:
+    - page.on('dialog')            native alert/confirm/prompt only; there are none
+    - getByRole('dialog')          no role attribute anywhere in the subtree
+    - getByRole('alertdialog')     same
+    - CSS :modal                   needs <dialog>.showModal() or fullscreen
+
+  The only handle is the ADF id convention, which is why the replayer scopes on
+  it:
+    [id$="::msgDlg"]            the container
+    [id$="::msgDlg::_ttxt"]     title      -> "Error" here, "Information" on success
+    [id$="::msgDlg::_cnt"]      body       -> the message text to capture
+    [id$="::msgDlg::cancel"]    the OK button  (<button>, matches the recording's
+                                               componentId "d1::msgDlg::cancel")
+    [id$="::msgDlg::close"]     the X       (<a title="Close">)
+
+  The `d1` prefix is a page-level container id and is not guaranteed, hence
+  suffix matching throughout.
+-->
+<div id="d1::msgDlg" class="p_AFError xkz x32z"><div class="x1q4" _afrpanelwindowbackground="1" style="display: none; z-index: 35; margin-left: 0px; margin-top: 3px; width: 429px; height: 112px;"></div><div class="x1q4" _afrpanelwindowbackground="1" style="display: none; z-index: 35; margin-left: 1px; margin-top: 2px; width: 427px; height: 114px;"></div><div class="x1q4" _afrpanelwindowbackground="1" style="display: none; z-index: 35; margin-left: 2px; margin-top: 1px; width: 425px; height: 116px;"></div><div class="x1q4" _afrpanelwindowbackground="1" style="display: none; z-index: 35; margin-left: 3px; margin-top: 0px; width: 423px; height: 118px;"></div><table cellpadding="0" cellspacing="0" border="0" summary="" role="presentation" class="xf5" style="z-index: 36;"><tbody><tr><td class="p_AFResizable xl1" id="d1::msgDlg::_hse">&nbsp;</td><td class="p_AFResizable xl2" id="d1::msgDlg::_hce"><table cellpadding="0" cellspacing="0" border="0" width="100%" summary="" role="presentation"><tbody><tr><td class="af_dialog_header-icon-title-wrapper"><div id="d1::msgDlg::_ticn" class="x1pw" style=""><img alt="" src="https://exsp-dev33.ds-fa.oraclepdemos.com/fscmUI/afr/alta-v1/error_status.png"></div></td><td class="xl3" id="d1::msgDlg::tb" style="user-select: none;"><div id="d1::msgDlg::_ttxt" class="xl0">Error</div></td><td class="x3bk"><div class="x1py"><a href="#" onclick="this.focus();return false" class="x1pp" id="d1::msgDlg::close" title="Close"></a></div></td></tr></tbody></table></td><td class="p_AFResizable xl4" id="d1::msgDlg::_hee">&nbsp;</td></tr><tr><td class="p_AFResizable x1ph" id="d1::msgDlg::_cse">&nbsp;</td><td class="p_AFResizable x1o" id="d1::msgDlg::contentContainer"><div id="d1::msgDlg::_ccntr" class="x1pf" style="position:relative;overflow:auto;"><div id="d1::msgDlg::_cnt" class="x1ll" data-afr-msg-apply-class="true"><div><div class="x1ml"></div><table cellspacing="0" cellpadding="0" summary="" role="presentation" class="x1my x1mx"><tbody><tr><td class="x1n2"><table class="x1my" cellspacing="0" cellpadding="0" summary="" role="presentation"><tbody><tr><td valign="top" style="width: 0px;"></td><td class="x1n1"><div class="x1mu"><span>You can't update the ship-to customer site on this transaction. (AR-856788)</span></div></td></tr></tbody></table></td></tr></tbody></table></div></div></div></td><td class="p_AFResizable x1pj" id="d1::msgDlg::_cee">&nbsp;</td></tr><tr><td class="p_AFResizable xta" id="d1::msgDlg::_fse"><div></div></td><td class="p_AFResizable xl5" id="d1::msgDlg::_fce"><table cellpadding="0" cellspacing="0" border="0" width="100%" summary="" role="presentation"><tbody><tr><td class="p_AFResizable x1pn" id="d1::msgDlg::_fcc"><button type="button" id="d1::msgDlg::cancel" class="xux p_AFTextOnly" onclick="this.focus();return false;" _afrpdo="cancel">OK</button></td><td align="left" valign="bottom"><div class="p_AFResizable x1pu"><a tabindex="-1" class="x1ps" id="d1::msgDlg::_ree" title="Resize"></a></div></td></tr></tbody></table></td><td class="p_AFResizable xtb" id="d1::msgDlg::_fee"><div></div></td></tr></tbody></table></div>

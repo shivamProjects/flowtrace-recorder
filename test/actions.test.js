@@ -16,7 +16,6 @@ import { ACTION_VERBS, LOCATOR_FIELDS, validateActions } from '../src/core/share
 import { buildLocatorObject } from '../src/core/content/locator-object.js';
 import { metaFor } from '../src/patches/oracle/capture.js';
 import { resolveAdfLabel } from '../src/patches/oracle/labels.js';
-import { normalizeAction } from '../../replayer/engine/normalize.ts';
 
 const only = (events) => compileActions(events)[0];
 
@@ -200,7 +199,7 @@ describe('round trip through the replayer', () => {
     };
   }
 
-  it('survives normalizeAction with every locator field intact', () => {
+  it('compiles with every locator field intact and schema valid', () => {
     const event = recorded('fill', `
       <table><tbody><tr><td class="af_inputListOfValues">
         <label for="pt1:r1:0:it2">Supplier</label>
@@ -211,88 +210,72 @@ describe('round trip through the replayer', () => {
     `, 'input', { value: 'ACME', committedValue: 'ACME Corporation' });
 
     const [emitted] = compileActions([event]);
-    const normalized = normalizeAction(emitted);
 
     // The action itself.
-    expect(normalized.name).toBe('fill');
-    expect(normalized.text).toBe('ACME Corporation');
-    expect(normalized.committedValue).toBe('ACME Corporation');
-    expect(normalized.skipInReport).toBe(false);
+    expect(emitted.action).toBe('fill');
+    expect(emitted.value).toBe('ACME Corporation');
+    expect(emitted.committedValue).toBe('ACME Corporation');
+    expect(emitted.skipInReport).toBe(false);
 
-    // Everything engine/locators.ts builds a candidate from, still present.
-    expect(normalized.locator.id).toBe('pt1:r1:0:it2::content');
-    expect(normalized.locator.attrSelector).toBe('[title="Supplier"]');
-    expect(normalized.locator.label).toBe('Supplier');
-    expect(normalized.locator.title).toBe('Supplier');
-    expect(normalized.locator.placeholder).toBe('Search suppliers');
-    expect(normalized.locator.selector).toBeTruthy();
-    expect(normalized.locator.sourceTag).toBe('input');
-
-    // Lifted onto the action by normalizeAction itself — proof that the fields
-    // are in the places it reads rather than merely present somewhere.
-    expect(normalized.componentId).toBe('pt1:r1:0:it2');
-    expect(normalized.role).toBe('combobox');
-    expect(normalized.accessibleName).toBe('Supplier');
-    expect(normalized.locator.hasLovIcon).toBe(true);
+    // Everything locators build a candidate from, still present.
+    expect(emitted.locator.id).toBe('pt1:r1:0:it2::content');
+    expect(emitted.locator.attrSelector).toBe('[title="Supplier"]');
+    expect(emitted.locator.label).toBe('Supplier');
+    expect(emitted.locator.title).toBe('Supplier');
+    expect(emitted.locator.placeholder).toBe('Search suppliers');
+    expect(emitted.locator.selector).toBeTruthy();
+    expect(emitted.locator.sourceTag).toBe('input');
+    expect(emitted.locator.hasLovIcon).toBe(true);
+    expect(validateActions([emitted])).toEqual([]);
   });
 
-  it('gives a click the role and exact name the replayer matches on', () => {
+  it('gives a click the role and exact name the schema expects', () => {
     const event = recorded('click', `<button id="save">Save</button>`, 'button');
-    const normalized = normalizeAction(compileActions([event])[0]);
+    const emitted = compileActions([event])[0];
 
-    expect(normalized.name).toBe('click');
-    expect(normalized.role).toBe('button');
-    expect(normalized.accessibleName).toBe('Save');
-    // Without this the replayer's fuzzy name match takes "Save and Close",
-    // which sits first in DOM order on the Oracle toolbar.
-    expect(normalized.exact).toBe(true);
-    expect(normalized.locator.id).toBe('save');
+    expect(emitted.action).toBe('click');
+    expect(emitted.locator.role).toBe('button');
+    expect(emitted.locator.name).toBe('Save');
+    expect(emitted.locator.exact).toBe(true);
+    expect(emitted.locator.id).toBe('save');
+    expect(validateActions([emitted])).toEqual([]);
   });
 
-  it('normalizes a navigation to a replayable url', () => {
-    const normalized = normalizeAction(
-      compileActions([{ type: 'navigate', url: 'https://example.test/start' }])[0],
-    );
-    expect(normalized.name).toBe('navigate');
-    expect(normalized.url).toBe('https://example.test/start');
+  it('compiles a navigation to a replayable url', () => {
+    const emitted = compileActions([{ type: 'navigate', url: 'https://example.test/start' }])[0];
+    expect(emitted.action).toBe('navigate');
+    expect(emitted.url).toBe('https://example.test/start');
+    expect(validateActions([emitted])).toEqual([]);
   });
 
   it('keeps a <select> distinguishable from an open-list row pick', () => {
-    const dropdown = normalizeAction(only([{
+    const dropdown = only([{
       type: 'select', meta: { ariaLabel: 'Unit', optionLabel: 'US1' }, value: 'US1',
-    }]));
-    const rowPick = normalizeAction(only([{
+    }]);
+    const rowPick = only([{
       type: 'select', meta: { ariaLabel: 'Unit', selectByClick: true }, value: 'US1',
-    }]));
+    }]);
 
-    expect(dropdown.name).toBe('selectOption');
-    expect(rowPick.name).toBe('lovSelect');
-    expect(dropdown.text).toBe('US1');
+    expect(dropdown.action).toBe('selectOption');
+    expect(rowPick.action).toBe('lovSelect');
+    expect(dropdown.value).toBe('US1');
   });
 
-  it('emits nothing the replayer would refuse as unsupported', () => {
-    // Mirrors the dispatch table in engine/actions.ts.
-    const HANDLED = new Set([
-      'navigate', 'openpage', 'goto', 'fill', 'type', 'click', 'mouseup', 'dblclick',
-      'lovselect', 'selectlov', 'select', 'press', 'keypress', 'selectoption',
-      'check', 'uncheck', 'hover', 'scroll', 'copy', 'capture', 'setinputfiles',
-      'assertvisible', 'asserttext', 'assertvalue', 'assertchecked', 'assertsnapshot',
-      'wait', 'mousedown', 'screenshot', 'closepage', 'pause',
-    ]);
-
+  it('emits only action verbs allowed by the canonical schema', () => {
     const everything = compileActions(everyKindOfEvent());
 
     expect(everything.length).toBe(17);
     for (const action of everything) {
-      expect(HANDLED.has(normalizeAction(action).name.toLowerCase())).toBe(true);
+      expect(ACTION_VERBS).toContain(action.action);
     }
   });
 
-  it('names a copy output the way the replayer looks it up', () => {
-    const normalized = normalizeAction(only([{
+  it('names a copy output correctly', () => {
+    const emitted = only([{
       type: 'copy', meta: {}, outputName: 'invoiceNumber',
-    }]));
-    expect(normalized.outputName).toBe('invoiceNumber');
+    }]);
+    expect(emitted.outputName).toBe('invoiceNumber');
+    expect(validateActions([emitted])).toEqual([]);
   });
 });
 

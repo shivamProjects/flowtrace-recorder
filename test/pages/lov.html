@@ -1,0 +1,12 @@
+<html><body>
+<label for="src">Transaction Source</label><input id="src" role="combobox">
+<label for="good">Currency</label><input id="good" role="combobox">
+<ul id="list" role="listbox" style="display:none"><li role="option" id="opt">USD</li></ul>
+<script>
+// Only the Currency field has a matching option; typing into it opens a list
+// whose row, when clicked, sets the field and closes the list.
+document.getElementById('good').addEventListener('input',()=>{document.getElementById('list').style.display='block';});
+document.getElementById('opt').addEventListener('click',()=>{
+  document.getElementById('good').value='USD';document.getElementById('list').style.display='none';});
+</script>
+</body></html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+  A plain listbox where one option's name is a strict PREFIX of another's — the
+  shape that made "Select Tax Country" pick the wrong country on a live pod.
+
+  A recorded name is replayed as a case-insensitive SUBSTRING match, so
+  "United States" names BOTH rows here. The WRONG (longer) row is deliberately
+  FIRST in DOM order, so falling back to the first painted match picks it — and
+  picks it silently, because the recorded name is a substring of what got
+  chosen, so every read-back check downstream agrees. Only comparing the name
+  EXACTLY picks the right row.
+
+  No vendor attributes anywhere on this page, deliberately: this half of the fix
+  is application-agnostic and must work with the generic patch.
+
+  The marker tokens are NOT prefixes of one another. assertText matches on
+  substring, so a marker reading "PICKED:United States" would also be satisfied
+  by a click on "United States Minor Outlying Islands" and the case would pass
+  while broken.
+-->
+<title>Prefix Options</title>
+<style>
+  ul { list-style: none; padding: 0; }
+  li { padding: 4px; border: 1px solid #ccc; cursor: pointer; }
+</style>
+
+<ul id="countries" role="listbox">
+  <li role="option" onclick="pick('PLAIN-UM')">United States Minor Outlying Islands</li>
+  <li role="option" onclick="pick('PLAIN-US')">United States</li>
+</ul>
+
+<h1 id="marker">NOTHING-PICKED</h1>
+<script>
+  function pick(token) { document.getElementById('marker').textContent = token; }
+</script>

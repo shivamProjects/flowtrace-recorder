@@ -1,0 +1,92 @@
+<!doctype html>
+<!--
+  The Fusion home springboard, reduced to the one property that breaks replays:
+  the cluster rail is paged by its own carets, and the number of caret clicks a
+  recording stored is a property of the RECORDER'S window, not of the target.
+
+    Step 12 (Open My Enterprise) failed: locator.click:
+      Element is outside of the viewport
+      - locator resolved to <a … class="flat-tabs-text" id="groupNode_MyEnterprise">
+
+  Wrong in both directions, and measurably so: in the saved jobs, Payables sits
+  behind 2 carets in three recordings, 3 in four others and 5 in two more — and
+  two of those groups were recorded at the SAME 1707x758.
+
+  MODELLING CHOICE. The earlier version of this fixture parked a fixed-position
+  rail past the right edge of the window, so which clusters were "on screen"
+  depended on the window the checks happened to run in. That made every case
+  built on it sensitive to viewport, which is the very variable under test. Here
+  paging instead shows a fixed WINDOW of two clusters and hides the rest, so
+  "reachable" is exact and identical at any window size, and a case that passes
+  says something about the engine rather than about the runner's screen.
+
+  Everything else is faithful to the real rail: the right caret disables at the
+  end of the strip, the left caret disables at the start, and the clusters that
+  are paged off are still in the DOM (ADF keeps them; that is why "the element
+  is missing" and "the element is paged away" have to be told apart).
+
+  Query parameters, each pinning one defect:
+    ?stuck=1   the right caret stays ENABLED but pages nothing. A rail in this
+               state must terminate the search, not spin on it.
+    ?page=N    the rail starts already scrolled to page N, as it is when an
+               earlier recorded run overshot the target. The destination is then
+               to the LEFT of where the recorded caret points.
+-->
+<title>Springboard</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  #clusterList { position: relative; height: 60px; white-space: nowrap; padding: 8px 60px; }
+  .flat-tabs-text {
+    display: inline-block; width: 200px; height: 40px; line-height: 40px;
+    text-align: center; border: 1px solid #999; text-decoration: none; color: #000;
+  }
+  .flat-tabs-text[hidden] { display: none; }
+  #clusters-left-nav { position: absolute; left: 8px; top: 16px; }
+  #clusters-right-nav { position: absolute; right: 8px; top: 16px; }
+</style>
+
+<div id="clusterList">
+  <button id="clusters-left-nav" onclick="pageBy(-1)">&lt;</button>
+  <a href="#" class="flat-tabs-text" id="groupNode_Me">Me</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_Sales">Sales</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_Procurement">Procurement</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_Payables"
+     onclick="mark('OPENED-PAYABLES'); return false;">Payables</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_Receivables">Receivables</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_Projects">Projects</a>
+  <a href="#" class="flat-tabs-text" id="groupNode_MyEnterprise"
+     onclick="mark('OPENED-MY-ENTERPRISE'); return false;">My Enterprise</a>
+  <button id="clusters-right-nav" onclick="pageBy(1)">&gt;</button>
+</div>
+
+<h1 id="marker">SPRINGBOARD</h1>
+
+<script>
+  var STUCK = new URLSearchParams(location.search).has('stuck');
+  var WINDOW_SIZE = 2;
+  var nodes = Array.prototype.slice.call(document.querySelectorAll('.flat-tabs-text'));
+  var maxPage = nodes.length - WINDOW_SIZE;
+  var page = Math.max(0, parseInt(new URLSearchParams(location.search).get('page') || '0', 10) || 0);
+
+  function paint() {
+    nodes.forEach(function (n, i) { n.hidden = i < page || i >= page + WINDOW_SIZE; });
+    // The real carets disable themselves at each end of the travel; that is the
+    // signal the search relies on to know a direction is exhausted.
+    document.getElementById('clusters-left-nav').disabled = page <= 0;
+    document.getElementById('clusters-right-nav').disabled = !STUCK && page >= maxPage;
+  }
+
+  function pageBy(delta) {
+    // ?stuck=1 — the caret still takes the click and still looks enabled, it
+    // just never moves the strip. Real rails do this when ADF has re-rendered
+    // the springboard and left the caret's handler bound to a stale scroller.
+    if (STUCK && delta > 0) return;
+    page = Math.max(0, Math.min(maxPage, page + delta));
+    paint();
+  }
+
+  page = Math.min(page, nodes.length - WINDOW_SIZE);
+
+  function mark(token) { document.getElementById('marker').textContent = token; }
+  paint();
+</script>

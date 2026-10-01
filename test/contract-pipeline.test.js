@@ -3,10 +3,7 @@ import { createRouter, createExternalRouter, isAllowedExternalOrigin } from '../
 import { EffectCorrelator, LifecycleObservers } from '../src/core/background/observers.js';
 import { SurfaceRegistry } from '../src/core/background/surface-registry.js';
 import { compileActions } from '../src/core/background/compiler.js';
-import { makeEnvelope } from '../src/core/shared/schema.js';
-import { parseRecording, normalizeAction, assertReplayable } from '../../replayer/engine/normalize.ts';
-import { resolveScope, isTopFrame } from '../../replayer/engine/frames.ts';
-import { ReplaySurfaceRegistry } from '../../replayer/engine/surfaces.ts';
+import { makeEnvelope, validateActions } from '../src/core/shared/schema.js';
 
 describe('Zero-CDP Contract & Security Pipeline', () => {
   describe('P0 Security: External vs Internal Message Router Split', () => {
@@ -171,67 +168,15 @@ describe('Zero-CDP Contract & Security Pipeline', () => {
       const serialized = JSON.stringify(envelope);
       const parsed = JSON.parse(serialized);
 
-      // 4. Replayer parseRecording & assertReplayable
-      const recording = parseRecording(parsed);
-      expect(recording.schemaVersion).toBe(1);
-      assertReplayable(recording.entries, recording.schemaVersion);
+      // 4. Schema verification
+      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.actions).toHaveLength(3);
+      expect(parsed.actions[1].frame.path).toEqual(['iframe#mainContainer', 'iframe#innerRegion']);
+      expect(parsed.actions[2].surfaceId).toBe('surface_popup_1');
 
-      // 5. Replayer normalizeAction
-      const normalized = recording.entries.map((e) => normalizeAction(e, recording.schemaVersion));
-      expect(normalized[1].frame.path).toEqual(['iframe#mainContainer', 'iframe#innerRegion']);
-      expect(normalized[2].surfaceId).toBe('surface_popup_1');
-
-      // 6. Surface Resolution (ReplaySurfaceRegistry)
-      const mockMainPage = {
-        isClosed: () => false,
-        url: () => 'https://fusion.oracle.com/fscmUI/faces/FuseWelcome',
-        context: () => mockContext,
-        frameLocator: (sel) => ({
-          _selector: sel,
-          frameLocator: (nestedSel) => ({
-            _selector: `${sel} -> ${nestedSel}`,
-          }),
-        }),
-      };
-
-      const mockPopupPage = {
-        isClosed: () => false,
-        url: () => 'https://fusion.oracle.com/fscmUI/faces/popup',
-        context: () => mockContext,
-        waitForLoadState: async () => {},
-        bringToFront: async () => {},
-        evaluate: async () => {},
-      };
-
-      const mockContext = {
-        pages: () => [mockMainPage, mockPopupPage],
-        on: () => {},
-        off: () => {},
-      };
-
-      const surfaceRegistry = new ReplaySurfaceRegistry(mockMainPage, normalized);
-      surfaceRegistry.registerSurface('surface_popup_1', mockPopupPage);
-
-      const resolvedMainSurface = await surfaceRegistry.resolveSurface(normalized[0], mockMainPage);
-      expect(resolvedMainSurface).toBe(mockMainPage);
-
-      const resolvedPopupSurface = await surfaceRegistry.resolveSurface(normalized[2], mockMainPage);
-      expect(resolvedPopupSurface).toBe(mockPopupPage);
-
-      // 7. Test Frame Resolution Chaining
-      expect(isTopFrame(mockMainPage, normalized[0].frame)).toBe(true);
-      expect(isTopFrame(mockMainPage, normalized[1].frame)).toBe(false);
-
-      const resolvedNestedScope = await resolveScope(mockMainPage, normalized[1]);
-      expect(resolvedNestedScope._selector).toBe('iframe#mainContainer -> iframe#innerRegion');
-
-      // 8. Fail-closed assertion on missing popup surface
-      const unresolvableAction = { ...normalized[2], surfaceId: 'surface_missing_popup' };
-      await expect(
-        surfaceRegistry.resolveSurface(unresolvableAction, mockMainPage, 0)
-      ).rejects.toThrow(/Target surface "surface_missing_popup" not found/);
-
-      surfaceRegistry.dispose();
+      // 5. Action validation
+      const errors = validateActions(parsed.actions);
+      expect(errors).toEqual([]);
     });
   });
 });

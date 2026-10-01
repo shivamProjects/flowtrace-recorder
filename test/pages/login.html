@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign in</title></head>
+<body>
+<!--
+  A login form, for proving that a credentialRef is decrypted and typed rather
+  than the recorded mask being typed. The submit handler only accepts the real
+  password, so a run that types "********" lands on the failure branch — which
+  is the whole point: the old behaviour looked like a passing step.
+-->
+<label for="u">User Name</label><input id="u">
+<label for="p">Password</label><input id="p" type="password">
+<button id="go">Next</button>
+<div id="out"></div>
+<script>
+document.getElementById('go').addEventListener('click', function () {
+  var u = document.getElementById('u').value;
+  var p = document.getElementById('p').value;
+  document.getElementById('out').textContent =
+    (u === 'test.user@example.com' && p === 'S3cr3t-P@ssw0rd-unicode')
+      ? 'Signed in' : 'Sign in failed';
+});
+</script>
+</body>
+</html>

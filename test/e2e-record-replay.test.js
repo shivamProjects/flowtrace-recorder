@@ -23,8 +23,8 @@ import { compileActions } from '../src/core/background/compiler.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const recorderRoot = resolve(here, '..');
-const replayerRoot = resolve(here, '../../replayer');
-const PAGES = resolve(replayerRoot, 'checks/pages');
+const replayerRoot = process.env.FLOWTRACE_REPLAYER_DIR || resolve(here, '../../flowtrace-replayer');
+const PAGES = resolve(recorderRoot, 'test', 'pages');
 const WORK = resolve(recorderRoot, '.work-e2e');
 
 const require = createRequire(join(replayerRoot, 'package.json'));

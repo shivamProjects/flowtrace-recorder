@@ -1,0 +1,23 @@
+<html><head>
+<!--
+  adf.html's decoy layout, under a Content-Security-Policy that forbids eval.
+
+  This is the ordinary case on a hardened ERP, and it used to break EVERY step:
+  the painted-element predicate was passed into the page as a STRING and run
+  through eval() there. Playwright's own evaluate is injected over CDP and is not
+  subject to CSP; the nested eval() is ordinary page-context eval and is not.
+  So firstPaintedIndex() threw for every candidate, returned -1, and resolve()
+  reported "matched N node(s), none painted" for locators that were perfectly
+  good.
+
+  No inline handlers here — script-src 'self' blocks those too, and the point of
+  the fixture is the engine, not the page.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+</head><body>
+<div style="position:absolute;left:-9999px"><label for="bu_a">Business Unit</label><input id="bu_a"></div>
+<div style="height:0;overflow:hidden"><label for="bu_b">Business Unit</label><input id="bu_b"></div>
+<div style="opacity:0"><label for="bu_c">Business Unit</label><input id="bu_c"></div>
+<div style="height:1600px"></div>
+<label for="bu">Business Unit</label><input id="bu">
+</body></html>

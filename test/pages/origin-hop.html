@@ -1,0 +1,13 @@
+<!doctype html>
+<!--
+  Moves the browser to a DIFFERENT origin without a navigate step.
+  127.0.0.1 and localhost are the same fixture server on the same port but
+  distinct origins, so following this link leaves page.url() on an origin that
+  is not the one the recording's login step established. That is the only way to
+  tell "aligned to the login origin" apart from "aligned to whatever page the
+  browser is on" — a navigate step could not do it, because the alignment would
+  rewrite the hop itself.
+-->
+<title>Origin Hop</title>
+<a id="go" href="#" onclick="location.href = location.href.replace('127.0.0.1', 'localhost'); return false;">Hop origin</a>
+<h1 id="marker">ORIGIN-HOP</h1>

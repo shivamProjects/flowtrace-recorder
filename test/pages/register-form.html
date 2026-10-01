@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Registration Internal - Start</title></head>
+<body>
+<!--
+  Synthetic — the tab opens-tab.html opens. Holds the Company field, which
+  exists nowhere else, so a replay that never follows the new tab cannot pass.
+-->
+<h1>Register Supplier</h1>
+<label for="company">Company</label>
+<input id="company">
+<div id="out"></div>
+<script>
+document.getElementById('company').addEventListener('change', function () {
+  document.getElementById('out').textContent = 'Company: ' + this.value;
+});
+</script>
+</body>
+</html>

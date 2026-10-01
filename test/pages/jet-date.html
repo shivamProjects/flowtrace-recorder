@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>JET date field — commits with a two-digit year</title>
+
+<!--
+  Models ONE measured behaviour of Oracle Redwood (JET) date fields, and nothing
+  else: on commit the field is repainted with a TWO-DIGIT year.
+
+      typed "9/18/2026"  ->  field reads "9/18/26"
+      typed "4/2/2027"   ->  field reads "4/2/27"
+
+  Measured live on fa-euth-dev79 via tools/replay-tests (redwood-date), and the
+  reason it matters: `dateParts` required a four-digit year, so the read-back
+  parsed to nothing, `datesEquivalent` answered false, and a perfectly good fill
+  was failed with `Value mismatch after fill`.
+
+  The second field starts out holding an OLD value, which is what a
+  re-parameterized step meets on a re-run: the field still shows what the
+  previous execution committed.
+-->
+
+<style>
+  body { font: 14px system-ui, sans-serif; padding: 24px; }
+  label { display: block; margin: 16px 0 4px; }
+</style>
+
+<label for="hire">Hire Date</label>
+<input id="hire" type="text" value="">
+
+<label for="rehire">Rehire Date</label>
+<!-- Already holds the previously committed value, exactly as a re-run finds it. -->
+<input id="rehire" type="text" value="1/1/21">
+
+<script>
+  // Oracle commits on blur, not on input, and reformats as it commits.
+  for (const el of document.querySelectorAll('input')) {
+    el.addEventListener('blur', () => {
+      const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(el.value.trim());
+      if (m) el.value = `${+m[1]}/${+m[2]}/${m[3].slice(2)}`;
+    });
+  }
+</script>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Two LOV launchers, one a prefix of the other</title>
+<style>
+  /*
+    Oracle's LOV search icon is an EMPTY anchor sized entirely by a background
+    sprite. With no stylesheet it measures 0x0 and the engine's painted check
+    (width>1 && height>1, see firstPaintedIndex in locators.ts) correctly
+    rejects it — so a fixture without these rules would test a condition that
+    never occurs on the live page.
+  */
+  .lovIcon { display: inline-block; width: 16px; height: 16px; background: #ccc; }
+</style>
+</head>
+<body>
+<!--
+  RECONSTRUCTED after being lost from the working tree. See the check
+  `guard/a-truncated-lov-title-must-not-open-the-wrong-field` in run.mjs.
+
+  Create Depreciation Method carries TWO launchers whose titles share the
+  prefix "Search: Depreciation ". A recording captured the first as
+  title="Search: Depreciation Method" when the real attribute is
+  "Search: Depreciation Method for Poland".
+
+  The danger is not that the step fails — it is that a LOOSE match succeeds on
+  the WRONG field. "Search: Depreciation Method" is a strict prefix of both
+  titles here, so a `[title*=...]` match would resolve the Frequency launcher
+  and every later step would act on the wrong control while reporting green.
+-->
+<label for="dm">Depreciation Method for Poland</label>
+<input id="dm">
+<a id="dmIcon" class="lovIcon" href="#" title="Search: Depreciation Method for Poland"></a>
+
+<label for="df">Depreciation Method Frequency</label>
+<input id="df">
+<a id="dfIcon" class="lovIcon" href="#" title="Search: Depreciation Method Frequency"></a>
+</body>
+</html>
