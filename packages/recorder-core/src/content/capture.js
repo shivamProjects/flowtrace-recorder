@@ -301,6 +301,10 @@ function evaluateAdapterObservation(type, target, event) {
     const observation = { type, target, event };
     const decision = safeInvoke(`${patch.id}.observe`, patch.observe, { kind: 'pass' }, observation, ctx);
     if (decision && typeof decision === 'object' && decision.kind) {
+      // Invariant: 'claim' without a candidate must NEVER drop generic capture
+      if (decision.kind === 'claim' && !decision.candidate) {
+        return { kind: 'pass' };
+      }
       return decision;
     }
   }
@@ -308,13 +312,28 @@ function evaluateAdapterObservation(type, target, event) {
   // 2. Legacy patch hook fallback
   if (type === 'click') {
     const claimed = safeInvoke(`${patch.id}.onClick`, patch.capture?.onClick, false, target, event, ctx);
-    if (claimed === true) return { kind: 'claim', candidate: null };
+    if (claimed && typeof claimed === 'object' && claimed.type) {
+      return { kind: 'claim', candidate: claimed };
+    }
+    if (claimed === true) {
+      return { kind: 'claimed_in_hook' };
+    }
   } else if (type === 'dblclick') {
     const claimed = safeInvoke(`${patch.id}.onDoubleClick`, patch.capture?.onDoubleClick, false, target, event, ctx);
-    if (claimed === true) return { kind: 'claim', candidate: null };
+    if (claimed && typeof claimed === 'object' && claimed.type) {
+      return { kind: 'claim', candidate: claimed };
+    }
+    if (claimed === true) {
+      return { kind: 'claimed_in_hook' };
+    }
   } else if (type === 'contextmenu') {
     const claimed = safeInvoke(`${patch.id}.onContextMenu`, patch.capture?.onContextMenu, false, target, event, ctx);
-    if (claimed === true) return { kind: 'claim', candidate: null };
+    if (claimed && typeof claimed === 'object' && claimed.type) {
+      return { kind: 'claim', candidate: claimed };
+    }
+    if (claimed === true) {
+      return { kind: 'claimed_in_hook' };
+    }
   } else if (type === 'input') {
     safeInvoke(`${patch.id}.onInput`, patch.capture?.onInput, undefined, target, event, ctx);
   } else if (type === 'change') {
@@ -344,11 +363,13 @@ function onClick(e) {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
-  if (decision.kind === 'claim') {
+  if (decision.kind === 'claim' && decision.candidate) {
     if (clickCorrelator) clickCorrelator.cancel();
-    if (decision.candidate) {
-      send(decision.candidate);
-    }
+    send(decision.candidate);
+    return;
+  }
+  if (decision.kind === 'claimed_in_hook') {
+    if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
@@ -396,11 +417,13 @@ function onDoubleClick(e) {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
-  if (decision.kind === 'claim') {
+  if (decision.kind === 'claim' && decision.candidate) {
     if (clickCorrelator) clickCorrelator.cancel();
-    if (decision.candidate) {
-      send(decision.candidate);
-    }
+    send(decision.candidate);
+    return;
+  }
+  if (decision.kind === 'claimed_in_hook') {
+    if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
@@ -447,11 +470,13 @@ function onContextMenu(e) {
     if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
-  if (decision.kind === 'claim') {
+  if (decision.kind === 'claim' && decision.candidate) {
     if (clickCorrelator) clickCorrelator.cancel();
-    if (decision.candidate) {
-      send(decision.candidate);
-    }
+    send(decision.candidate);
+    return;
+  }
+  if (decision.kind === 'claimed_in_hook') {
+    if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};

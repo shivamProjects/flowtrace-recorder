@@ -52,6 +52,7 @@ export const SurfaceInfoSchema = z.object({
 });
 
 export const RecordedLocatorSchema = z.object({
+  id: z.string().optional(),
   selector: z.string().optional(),
   primary: z.string().optional(),
   name: z.string().optional(),
@@ -62,7 +63,7 @@ export const RecordedLocatorSchema = z.object({
   componentId: z.string().optional(),
   candidates: z.array(z.string()).optional(),
   backupSelectors: z.array(z.string()).optional(),
-});
+}).passthrough();
 
 export const StepEffectSchema = z.object({
   type: z.string(),
@@ -110,6 +111,7 @@ export const NavigateStepSchema = z.object({
   ...BaseStepFields,
   action: z.literal('navigate'),
   value: z.string().min(1),
+  url: z.string().optional(),
 });
 
 export const ClickStepSchema = z.object({
