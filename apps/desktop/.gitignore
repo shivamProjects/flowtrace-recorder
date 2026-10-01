@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+temp/
+*.tmp
+
+# Recordings
+recordings/
+
+# Build output
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# User requested folders
+playwright-recorder-electron/
+BKP/
+
+# Installer files
+*.dmg
+*.exe
+*.zip

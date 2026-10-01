@@ -1,0 +1,377 @@
+doctype html
+html
+  head
+    title Sign In - FlowTrace Recorder
+    meta(charset='utf-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1')
+    style.
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        height: 100%;
+      }
+      body {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        color: #1f2937;
+        min-height: 100vh;
+        background: hsl(215, 28%, 17%);
+      }
+
+      .auth-shell {
+        position: relative;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding: 32px 48px;
+        overflow: hidden;
+      }
+      .auth-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        opacity: 0.10;
+        background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        pointer-events: none;
+      }
+      .auth-shell > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .auth-body {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 0;
+      }
+      .login-shell {
+        width: 100%;
+        max-width: 420px;
+      }
+      .login-card {
+        background: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 14px;
+        padding: 28px 28px 24px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0);
+      }
+      .brand-logo-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .brand-logo {
+        height: 28px;
+        width: auto;
+        display: block;
+      }
+      .brand-product {
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+        letter-spacing: 0.5px;
+        line-height: 1;
+      }
+      .subtitle {
+        text-align: center;
+        color: #6b7280;
+        font-size: 13px;
+        margin-bottom: 18px;
+      }
+      .form-group {
+        margin-bottom: 14px;
+      }
+      .password-wrap {
+        position: relative;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        color: #1f2937;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      input {
+        width: 100%;
+        padding: 11px 13px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #1f2937;
+        background: #f3f5f9;
+      }
+      input::placeholder {
+        color: #9aa3b2;
+      }
+      input:focus {
+        outline: none;
+        border-color: #6f97ff;
+        background: #ffffff;
+        box-shadow: 0 0 0 3px rgba(47, 103, 230, 0.14);
+      }
+      .password-wrap input {
+        padding-right: 42px;
+      }
+      .password-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: #6e7b93;
+        cursor: pointer;
+        padding: 0;
+        margin: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.15s ease, color 0.15s ease;
+      }
+      .password-toggle:hover {
+        background: rgba(47, 103, 230, 0.1);
+        color: #2d5ed6;
+      }
+      .password-toggle:focus-visible {
+        outline: 2px solid rgba(47, 103, 230, 0.35);
+      }
+      .password-toggle svg {
+        width: 19px;
+        height: 19px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .password-toggle .eye-open {
+        display: none;
+      }
+      .password-toggle.is-visible .eye-open {
+        display: block;
+      }
+      .password-toggle.is-visible .eye-off {
+        display: none;
+      }
+      .login-submit {
+        position: relative;
+        width: 100%;
+        padding: 12px 14px;
+        background: hsl(217, 90%, 60%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 4px;
+      }
+      .login-submit:hover {
+        background: hsl(217, 90%, 54%);
+      }
+      .login-submit:disabled {
+        background: hsl(217, 50%, 75%);
+        cursor: not-allowed;
+      }
+      .login-submit.is-loading {
+        color: transparent;
+      }
+      .login-submit.is-loading::after {
+        content: "";
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px solid rgba(255, 255, 255, 0.42);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+      }
+      .error {
+        background: #ffeef1;
+        color: #c5263c;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #ffd3da;
+        font-size: 12px;
+        display: none;
+      }
+
+      .auth-footer {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        color: hsl(213, 6%, 63%);
+      }
+      .auth-footer .copyright {
+        text-align: left;
+        letter-spacing: 0.2px;
+      }
+      .auth-footer .copyright .year {
+        margin-right: 6px;
+      }
+      .auth-footer .copyright .brand {
+        color: hsl(0, 0%, 92%);
+        font-weight: 600;
+      }
+      .auth-footer .version {
+        font-size: 12px;
+        color: hsl(213, 6%, 53%);
+        text-align: center;
+        white-space: nowrap;
+      }
+      .auth-footer .partner {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .auth-footer .partner img {
+        height: 40px;
+        width: auto;
+        object-fit: contain;
+      }
+
+      @media (max-width: 600px) {
+        .auth-shell { padding: 24px 20px; }
+        .auth-footer {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          text-align: center;
+          gap: 8px;
+        }
+        .auth-footer .copyright { text-align: center; }
+        .auth-footer .partner { justify-content: center; }
+      }
+
+      @keyframes spin {
+        to {
+          transform: translate(-50%, -50%) rotate(360deg);
+        }
+      }
+  body
+    .auth-shell
+
+      .auth-body
+        .login-shell
+          .login-card
+            .brand-logo-wrap
+              img.brand-logo(src='/images/flowtrace-icon.png', alt='FlowTrace')
+              span.brand-product Recorder
+            p.subtitle Use your Login credentials
+            #error.error
+
+            form#loginForm
+              .form-group
+                label(for='username') Username
+                input#username(type='text', required, autocomplete='username', placeholder='Enter your username')
+              .form-group
+                label(for='password') Password
+                .password-wrap
+                  input#password(type='password', required, autocomplete='current-password', placeholder='Enter your password')
+                  button#togglePassword.password-toggle(type='button', aria-label='Show password', aria-controls='password', aria-pressed='false')
+                    span.eye-open
+                      svg(viewBox='0 0 24 24', aria-hidden='true')
+                        path(d='M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0')
+                        circle(cx='12', cy='12', r='3')
+                    span.eye-off
+                      svg(viewBox='0 0 24 24', aria-hidden='true')
+                        path(d='M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .698 10.75 10.75 0 0 1-1.444 2.49')
+                        path(d='M14.084 14.158a3 3 0 0 1-4.242-4.242')
+                        path(d='M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143')
+                        path(d='m2 2 20 20')
+              button#loginSubmit.login-submit(type='submit') Sign in
+
+      footer.auth-footer
+        span.copyright
+          span.year © 2026
+          span.brand FlowTrace
+          span  All rights reserved.
+        span.version V3.2.2
+        span.partner
+          img(src='/images/oracle_white.png', alt='Oracle Partner')
+
+    script.
+      const form = document.getElementById('loginForm');
+      const errorDiv = document.getElementById('error');
+      const passwordInput = document.getElementById('password');
+      const togglePassword = document.getElementById('togglePassword');
+      const submitBtn = document.getElementById('loginSubmit');
+
+      // Fetch API base URL from config
+      let API_BASE_URL = 'http://nitro:3050';
+
+      async function loadConfig() {
+        try {
+          const response = await fetch('/api/config');
+          const config = await response.json();
+          API_BASE_URL = config.data ? config.data.apiBaseUrl : (config.apiBaseUrl || 'http://nitro:3050');
+        } catch (error) {
+          console.error('Failed to load config, using default');
+        }
+      }
+
+      loadConfig();
+
+      togglePassword.addEventListener('click', () => {
+        const isVisible = passwordInput.type === 'text';
+        passwordInput.type = isVisible ? 'password' : 'text';
+        togglePassword.classList.toggle('is-visible', !isVisible);
+        togglePassword.setAttribute('aria-pressed', String(!isVisible));
+        togglePassword.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
+      });
+
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        submitBtn.disabled = true;
+        submitBtn.classList.add('is-loading');
+        submitBtn.setAttribute('aria-busy', 'true');
+        errorDiv.style.display = 'none';
+
+        try {
+          const response = await fetch('/api/proxy/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.data && data.data.token) {
+            localStorage.setItem('authToken', data.data.token);
+            if (data.data.refreshToken) localStorage.setItem('refreshToken', data.data.refreshToken);
+            localStorage.setItem('user', JSON.stringify(data.data.user));
+            window.location.href = '/';
+          } else {
+            errorDiv.textContent = (data.error && data.error !== 'ERROR') ? data.error : (data.message || 'Login failed: Invalid credentials');
+            errorDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('is-loading');
+            submitBtn.removeAttribute('aria-busy');
+          }
+        } catch (error) {
+          errorDiv.textContent = 'Cannot connect to server (' + (error.message || 'Network error') + ')';
+          errorDiv.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('is-loading');
+          submitBtn.removeAttribute('aria-busy');
+        }
+      });
+

@@ -1,0 +1,3222 @@
+extends layout
+
+block content
+  .preview-root
+    .browser-window
+      .title-bar
+        .title-left
+          img.app-logo(src='/images/flowtrace-icon.png', alt='FlowTrace')
+          .title-brand
+            span.live-dot
+            span.brand-title Recorder
+        .title-right
+          span#domainBadge.badge.badge-domain
+            i.badge-icon(data-lucide='wifi', aria-hidden='true')
+            span#domainBadgeText Connected
+          span.badge.badge-version V3.2.2
+          button#logoutBtn.btn.btn-ghost(type='button') Logout
+
+      .address-bar
+        .nav-controls
+          button#navBack.nav-btn(type='button', title='Back')
+            i.nav-icon(data-lucide='chevron-left', aria-hidden='true')
+          button#navForward.nav-btn(type='button', disabled, title='Forward')
+            i.nav-icon(data-lucide='chevron-right', aria-hidden='true')
+          button#navRefresh.nav-btn(type='button', title='Refresh')
+            i.nav-icon(data-lucide='rotate-cw', aria-hidden='true')
+        .url-bar
+          i.lock-icon(data-lucide='lock', aria-hidden='true', title='Secure')
+          input#recordUrl(type='text', placeholder='https://your-instance.fa.ocs.oraclecloud.com/', value='https://ibqwjb-dev1.fa.ocs.oraclecloud.com/')
+
+      .content
+        .content-grid
+          .main-column
+            .card
+              .button-row
+                button#startRecord.btn.btn-primary(type='button')
+                  i.btn-icon(data-lucide='play', aria-hidden='true')
+                  | Start Recording
+                button#stopRecord.btn.btn-danger(type='button', disabled)
+                  i.btn-icon(data-lucide='square', aria-hidden='true')
+                  | Stop & Get Actions
+
+            .card#savePanel(style='display:none;')
+              h3 Save Recording
+              .field-row
+                .field
+                  label Customer
+                  .lookup#customerLookup
+                    button#customerTrigger.lookup-trigger(type='button')
+                      span#customerValue.lookup-value Select customer
+                      i.lookup-caret(data-lucide='chevron-down', aria-hidden='true')
+                    .lookup-menu#customerMenu
+                      .lookup-search-wrap
+                        i.lookup-search-icon(data-lucide='search', aria-hidden='true')
+                        input#customerSearch.lookup-search(type='text', placeholder='Type to search...')
+                      .lookup-list#customerList
+                .field
+                  label Instance
+                  .lookup#instanceLookup
+                    button#instanceTrigger.lookup-trigger(type='button')
+                      span#instanceValue.lookup-value Select instance
+                      i.lookup-caret(data-lucide='chevron-down', aria-hidden='true')
+                    .lookup-menu#instanceMenu
+                      .lookup-search-wrap
+                        i.lookup-search-icon(data-lucide='search', aria-hidden='true')
+                        input#instanceSearch.lookup-search(type='text', placeholder='Type to search...')
+                      .lookup-list#instanceList
+              .field-row
+                .field
+                  label Instance User
+                  .lookup#instanceUserLookup
+                    button#instanceUserTrigger.lookup-trigger(type='button')
+                      span#instanceUserValue.lookup-value Select instance user
+                      i.lookup-caret(data-lucide='chevron-down', aria-hidden='true')
+                    .lookup-menu#instanceUserMenu
+                      .lookup-search-wrap
+                        i.lookup-search-icon(data-lucide='search', aria-hidden='true')
+                        input#instanceUserSearch.lookup-search(type='text', placeholder='Type to search...')
+                      .lookup-list#instanceUserList
+                .field
+                  label Business Process
+                  .lookup#businessProcessLookup
+                    button#businessProcessTrigger.lookup-trigger(type='button')
+                      span#businessProcessValue.lookup-value Select business process
+                      i.lookup-caret(data-lucide='chevron-down', aria-hidden='true')
+                    .lookup-menu#businessProcessMenu
+                      .lookup-search-wrap
+                        i.lookup-search-icon(data-lucide='search', aria-hidden='true')
+                        input#businessProcessSearch.lookup-search(type='text', placeholder='Type to search...')
+                      .lookup-list#businessProcessList
+                .field
+                  label(for='testCaseName') Test Case Name
+                  input#testCaseName(type='text', placeholder='Enter test case name')
+              .field
+                label(for='description') Description
+                input#description(type='text', placeholder='Enter description')
+              .button-row
+                button#confirmSave.btn.btn-success(type='button')
+                  i.btn-icon(data-lucide='save', aria-hidden='true')
+                  | Save
+                button#discardRecording.btn.btn-ghost(type='button')
+                  i.btn-icon(data-lucide='trash-2', aria-hidden='true')
+                  | Discard Recording
+
+            .card
+              .section-header
+                h3.section-title
+                  i.section-icon(data-lucide='history', aria-hidden='true')
+                  | Recent Scripts
+                button#recentScriptsToggle.section-link(type='button', style='display:none;') Show All
+              #recentScriptsList.recent-scripts-list.empty-row No scripts saved yet.
+
+            .card
+              .card-header-row
+                h3 Recorded Actions
+                #actionsCount Actions: 0
+                button#toggleJsonBtn.toggle-json-btn(type='button', style='display:none;') Show JSON
+              #stepsTable
+              pre#actionsDisplay(style='display:none;')
+
+          .side-column
+            .card
+              h3 Session
+              .session-row
+                span.session-label
+                  i.session-icon(data-lucide='clock', aria-hidden='true')
+                  | Last login
+                span#lastLogin
+              .session-row
+                span.session-label
+                  i.session-icon(data-lucide='monitor', aria-hidden='true')
+                  | Device
+                span#deviceLabel
+              .session-row
+                span.session-label
+                  i.session-icon(data-lucide='server', aria-hidden='true')
+                  | Version
+                span V3.2.2
+              .session-row
+                span.session-label
+                  i.session-icon(data-lucide='user', aria-hidden='true')
+                  | User
+                span#sessionUser -
+
+      .status-bar
+        #statusLeft
+        #statusText Ready
+
+  #toastHost.toast-host
+
+  #dialogOverlay.dialog-overlay
+    .dialog-panel(role='dialog', aria-modal='true', aria-labelledby='dialogTitle', aria-describedby='dialogMessage')
+      .dialog-header
+        .dialog-title-wrap
+          i#dialogIcon.dialog-title-icon(data-lucide='info', aria-hidden='true')
+          h4#dialogTitle.dialog-title Notice
+        button#dialogClose.dialog-close(type='button', aria-label='Close')
+          i(data-lucide='x', aria-hidden='true')
+      p#dialogMessage.dialog-message
+      .dialog-actions
+        button#dialogCancel.dialog-btn.dialog-btn-ghost(type='button') Cancel
+        button#dialogConfirm.dialog-btn.dialog-btn-primary(type='button') OK
+
+  #recordModeOverlay.dialog-overlay
+    .dialog-panel(role='dialog', aria-modal='true', aria-labelledby='recordModeTitle')
+      .dialog-header
+        .dialog-title-wrap
+          i.dialog-title-icon(data-lucide='settings', aria-hidden='true')
+          h4#recordModeTitle.dialog-title Select Recording Mode
+        button#recordModeClose.dialog-close(type='button', aria-label='Close')
+          i(data-lucide='x', aria-hidden='true')
+      .record-mode-content
+        .mode-option
+          .mode-info
+            .mode-label
+              i(data-lucide='hand', aria-hidden='true', style='width:18px;height:18px;margin-right:8px;')
+              strong Record New Test Script
+            p.mode-description Opens browser to blank page. Navigate manually before recording starts.
+          label.toggle-switch
+            input#manualModeRadio(type='radio', name='recordMode', value='manual', checked)
+            span.toggle-slider
+        .mode-option
+          .mode-info
+            .mode-label
+              i(data-lucide='zap', aria-hidden='true', style='width:18px;height:18px;margin-right:8px;')
+              strong Record Navigation Path
+            p.mode-description Opens browser and navigates to URL immediately. Best for quick recordings.
+          label.toggle-switch
+            input#instantModeRadio(type='radio', name='recordMode', value='instant')
+            span.toggle-slider
+      .dialog-actions
+        button#recordModeCancel.dialog-btn.dialog-btn-ghost(type='button') Cancel
+        button#recordModeConfirm.dialog-btn.dialog-btn-primary(type='button') Start Recording
+
+  style.
+    :root {
+      --bg: #f4f6fa;
+      --card: #ffffff;
+      --muted: #eef1f7;
+      --line: #d8dee9;
+      --text: #1d2430;
+      --subtle: #667084;
+      --primary: #2457ff;
+      --danger: #db2f45;
+      --success: #1e9e58;
+      --warning: #f4b740;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      overflow-x: hidden;
+    }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 15% -10%, #ffffff 0%, #f4f6fa 35%, #e8edf7 100%);
+      color: var(--text);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    .preview-root {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .browser-window {
+      width: 100%;
+      max-width: 1140px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      box-shadow: 0 20px 60px rgba(22, 35, 67, 0.16);
+      overflow: hidden;
+    }
+
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: #f3f5fa;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .app-logo {
+      height: 22px;
+      width: auto;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    .title-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--danger);
+      box-shadow: 0 0 0 0 rgba(219, 47, 69, 0.6);
+      animation: pulse 1.8s infinite;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      white-space: nowrap;
+      letter-spacing: 0.2px;
+    }
+
+    .title-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      font-weight: 700;
+    }
+
+    .badge-icon {
+      width: 11px;
+      height: 11px;
+      stroke-width: 2.2;
+    }
+
+    .badge-version {
+      color: #415064;
+      background: #e8edf5;
+    }
+
+    .badge-domain {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #178a4d;
+      border: 1px solid rgba(23, 138, 77, 0.3);
+      background: rgba(23, 138, 77, 0.08);
+    }
+    .badge-domain.disconnected {
+      color: #db2f45;
+      border-color: rgba(219, 47, 69, 0.3);
+      background: rgba(219, 47, 69, 0.08);
+    }
+
+    .address-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #f7f9fd;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      color: #4d596d;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .nav-icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.3;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      border-color: var(--line);
+      background: #eef2f8;
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .url-bar {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+    }
+
+    .lock-icon {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.3;
+      color: #178a4d;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    #recordUrl {
+      width: 100%;
+      border: none;
+      background: transparent;
+      padding: 10px 0;
+      color: #4d596d;
+      font-size: 12px;
+      outline: none;
+      font-family: "Consolas", "Courier New", monospace;
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .main-column,
+    .side-column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .card h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+    }
+
+    .context-card {
+      background: #f8fbff;
+      border-color: rgba(36, 87, 255, 0.24);
+    }
+
+    @keyframes blink-logo {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.6;
+        transform: scale(1.15);
+      }
+    }
+
+    .download-btn.highlighted .os-icon {
+      animation: blink-logo 1.5s ease-in-out infinite;
+    }
+
+    #npxCommand:hover {
+      background: #0f172a !important;
+    }
+
+    .context-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .context-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--subtle);
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .label-icon {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.2;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .context-value {
+      font-size: 13px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .info-text {
+      margin: 0;
+      font-size: 12px;
+      color: var(--subtle);
+      background: #f2f5fd;
+      border-left: 3px solid var(--primary);
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .button-row {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      transition: transform 0.08s ease, filter 0.12s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      filter: brightness(0.96);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn-icon {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.2;
+      margin-right: 6px;
+      flex: 0 0 auto;
+    }
+
+    .btn-spinner {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.2;
+      margin-right: 6px;
+      flex: 0 0 auto;
+      animation: spin 0.9s linear infinite;
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: #3f4c61;
+      padding: 7px 11px;
+    }
+
+    .field {
+      margin-top: 10px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #3f4c61;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 13px;
+      outline: none;
+      background: #ffffff;
+      color: #243046;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: #94abff;
+      box-shadow: 0 0 0 2px rgba(36, 87, 255, 0.14);
+    }
+
+    .field select:disabled {
+      background: #f4f7fc;
+      color: #8591a4;
+      cursor: not-allowed;
+    }
+
+    .lookup {
+      position: relative;
+    }
+
+    .lookup-trigger {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: #334056;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 10px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .lookup-trigger:disabled {
+      background: #f4f7fc;
+      color: #8591a4;
+      cursor: not-allowed;
+    }
+
+    .lookup-value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .lookup-value.lookup-placeholder {
+      color: #8a97ab;
+    }
+
+    .lookup-caret {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.2;
+      color: #6d7a8f;
+      flex: 0 0 auto;
+      transition: transform 0.15s ease;
+    }
+
+    .lookup.is-open .lookup-caret {
+      transform: rotate(180deg);
+    }
+
+    .lookup-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 6px);
+      background: #ffffff;
+      border: 1px solid #d9e1ef;
+      border-radius: 10px;
+      box-shadow: 0 16px 34px rgba(20, 35, 65, 0.18);
+      z-index: 35;
+      display: none;
+      overflow: hidden;
+    }
+
+    .lookup.is-open .lookup-menu {
+      display: block;
+    }
+
+    .lookup-search-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-bottom: 1px solid #e8edf6;
+      background: #f8fafe;
+    }
+
+    .lookup-search-icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.2;
+      color: #7a879a;
+      flex: 0 0 auto;
+    }
+
+    .lookup-search {
+      width: 100%;
+      border: 1px solid #d4deed;
+      border-radius: 7px;
+      padding: 7px 9px;
+      font-size: 12px;
+      outline: none;
+      background: #ffffff;
+      color: #2b374a;
+    }
+
+    .lookup-search:focus {
+      border-color: #84a0ff;
+      box-shadow: 0 0 0 2px rgba(36, 87, 255, 0.14);
+    }
+
+    .lookup-list {
+      max-height: 180px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 4px;
+    }
+
+    .lookup-option {
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #2f3d52;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .lookup-option span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .lookup-option:hover {
+      background: #f2f6ff;
+    }
+
+    .lookup-option.is-selected {
+      background: #edf2ff;
+      color: #2457ff;
+      font-weight: 700;
+    }
+
+    .lookup-check {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.3;
+      flex: 0 0 auto;
+      visibility: hidden;
+    }
+
+    .lookup-option.is-selected .lookup-check {
+      visibility: visible;
+    }
+
+    .lookup-empty {
+      padding: 10px;
+      font-size: 12px;
+      color: #8391a5;
+      text-align: center;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .section-link {
+      border: none;
+      background: transparent;
+      color: #5b6f96;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0;
+      white-space: nowrap;
+    }
+
+    .section-link:hover {
+      color: #2457ff;
+      text-decoration: underline;
+    }
+
+    .section-icon {
+      color: var(--primary);
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.2;
+      flex: 0 0 auto;
+    }
+
+    .empty-row {
+      color: var(--subtle);
+      font-size: 12px;
+      text-align: center;
+      padding: 10px;
+      border: 1px dashed #d4dce9;
+      border-radius: 8px;
+      background: #fafcff;
+    }
+
+    .recent-scripts-list {
+      max-height: 250px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 2px;
+    }
+
+    .recent-scripts-list.empty-row {
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+
+    .script-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #e6ebf4;
+      background: #fafcff;
+      margin-top: 8px;
+    }
+    .script-row.is-clickable {
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .script-row.is-clickable:hover {
+      background: #f0f5ff;
+      border-color: #c7d4ec;
+    }
+
+    .script-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .script-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .script-file-icon {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.1;
+      color: #7a879a;
+      margin-top: 1px;
+      flex: 0 0 auto;
+    }
+
+    .script-name {
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .script-meta {
+      margin: 2px 0 0;
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .script-time {
+      color: var(--subtle);
+      font-size: 11px;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    #actionsCount {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #3f4c61;
+    }
+
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .card-header-row h3 {
+      margin: 0;
+      flex: 1;
+    }
+    .toggle-json-btn {
+      font-size: 11px;
+      padding: 3px 10px;
+      border: 1px solid #b0bec5;
+      border-radius: 6px;
+      background: #f0f4f8;
+      color: #3f4c61;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .toggle-json-btn:hover { background: #e3eaf6; }
+
+    #stepsTable {
+      max-height: 300px;
+      overflow: auto;
+    }
+    #stepsTable table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    #stepsTable thead th {
+      background: #f4f7fc;
+      color: #5a6a85;
+      font-weight: 600;
+      padding: 7px 10px;
+      text-align: left;
+      border-bottom: 2px solid #e3eaf6;
+      white-space: nowrap;
+    }
+    #stepsTable tbody tr {
+      border-bottom: 1px solid #edf1f8;
+    }
+    #stepsTable tbody tr:last-child { border-bottom: none; }
+    #stepsTable tbody tr:hover { background: #f8faff; }
+    #stepsTable td {
+      padding: 6px 10px;
+      vertical-align: top;
+      color: #2b3646;
+    }
+    #stepsTable td:first-child {
+      color: #8a9ab5;
+      font-size: 11px;
+      width: 36px;
+      white-space: nowrap;
+    }
+    #stepsTable .step-value {
+      color: #4a6fa5;
+      font-size: 11px;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #stepsTable .empty-row {
+      text-align: center;
+      color: #b0bec5;
+      padding: 18px;
+    }
+
+    #actionsDisplay {
+      margin: 0;
+      background: #fbfcff;
+      border: 1px solid #e3eaf6;
+      border-radius: 8px;
+      padding: 10px;
+      max-height: 300px;
+      overflow: auto;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #2b3646;
+    }
+
+    .session-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid #edf1f8;
+      font-size: 12px;
+    }
+
+    .session-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .session-row span:last-child {
+      font-weight: 700;
+      text-align: right;
+      max-width: 65%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--subtle);
+    }
+
+    .session-icon {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.2;
+      flex: 0 0 auto;
+      color: #7a879a;
+    }
+
+    .lucide {
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .status-bar {
+      border-top: 1px solid var(--line);
+      background: #f6f8fc;
+      color: var(--subtle);
+      font-size: 11px;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #statusText {
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toast-host {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      min-width: 300px;
+      max-width: 420px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      background: #ffffff;
+      border: 1px solid #dfe6f3;
+      border-radius: 12px;
+      box-shadow: 0 18px 36px rgba(20, 35, 65, 0.18);
+      padding: 12px;
+      pointer-events: auto;
+      animation: toastIn 0.18s ease;
+    }
+
+    .toast-hide {
+      animation: toastOut 0.16s ease forwards;
+    }
+
+    .toast-icon-wrap {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+
+    .toast-icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.3;
+    }
+
+    .toast-text {
+      margin: 1px 0 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #2e3a4c;
+      flex: 1;
+      white-space: pre-wrap;
+    }
+
+    .toast-close {
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      color: #7a879a;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .toast-close:hover {
+      background: #edf2fa;
+      color: #5b677b;
+    }
+
+    .toast-close i {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.3;
+    }
+
+    .toast-success .toast-icon-wrap {
+      color: #198f50;
+      background: rgba(25, 143, 80, 0.13);
+    }
+
+    .toast-info .toast-icon-wrap {
+      color: #2457ff;
+      background: rgba(36, 87, 255, 0.12);
+    }
+
+    .toast-warning .toast-icon-wrap {
+      color: #c67d09;
+      background: rgba(241, 167, 38, 0.17);
+    }
+
+    .toast-error .toast-icon-wrap {
+      color: #c72a40;
+      background: rgba(219, 47, 69, 0.12);
+    }
+
+    .dialog-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(9, 18, 34, 0.45);
+      backdrop-filter: blur(3px);
+    }
+
+    .dialog-overlay.is-open {
+      display: flex;
+    }
+
+    .dialog-panel {
+      width: min(460px, 100%);
+      border-radius: 14px;
+      border: 1px solid #dce4f2;
+      background: #ffffff;
+      box-shadow: 0 24px 54px rgba(17, 30, 56, 0.24);
+      padding: 16px 16px 14px;
+      animation: dialogIn 0.18s ease;
+    }
+
+    .dialog-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .dialog-title-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .dialog-title-icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2.2;
+      color: #2457ff;
+      flex: 0 0 auto;
+    }
+
+    .dialog-title {
+      margin: 0;
+      font-size: 16px;
+      color: #1f2a3d;
+      line-height: 1.2;
+    }
+
+    .dialog-close {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: #6f7c91;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .dialog-close:hover {
+      background: #edf2fa;
+      color: #516079;
+    }
+
+    .dialog-close i {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2.2;
+    }
+
+    .dialog-message {
+      margin: 12px 0 0;
+      color: #425168;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .dialog-actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .dialog-btn {
+      border: 1px solid transparent;
+      border-radius: 9px;
+      min-width: 94px;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .dialog-btn-ghost {
+      border-color: #d9e1ef;
+      background: #ffffff;
+      color: #48566c;
+    }
+
+    .dialog-btn-ghost:hover {
+      background: #f4f7fd;
+    }
+
+    .dialog-btn-primary {
+      background: #2457ff;
+      color: #ffffff;
+    }
+
+    .dialog-btn-primary:hover {
+      filter: brightness(0.96);
+    }
+
+    .dialog-btn-warning {
+      background: #ea9f19;
+      color: #ffffff;
+    }
+
+    .dialog-btn-warning:hover {
+      filter: brightness(0.96);
+    }
+
+    .dialog-btn-danger {
+      background: #db2f45;
+      color: #ffffff;
+    }
+
+    .dialog-btn-danger:hover {
+      filter: brightness(0.96);
+    }
+
+    body.dialog-open {
+      overflow: hidden;
+    }
+
+    .record-mode-content {
+      padding: 8px 0;
+    }
+
+    .mode-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .mode-option:hover {
+      border-color: #2457ff;
+      background: #f0f4ff;
+    }
+
+    .mode-option.is-selected {
+      border-color: #2457ff;
+      background: #f0f4ff;
+    }
+
+    .mode-info {
+      flex: 1;
+    }
+
+    .mode-label {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 15px;
+      color: #1e293b;
+    }
+
+    .mode-description {
+      margin: 0;
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+      margin-left: 16px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #cbd5e1;
+      transition: 0.3s;
+      border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #2457ff;
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+
+    .toggle-switch input:focus + .toggle-slider {
+      box-shadow: 0 0 0 2px rgba(36, 87, 255, 0.2);
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(219, 47, 69, 0.6);
+      }
+      70% {
+        box-shadow: 0 0 0 8px rgba(219, 47, 69, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(219, 47, 69, 0);
+      }
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes toastOut {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+    }
+
+    @keyframes dialogIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 980px) {
+      body {
+        padding: 12px;
+      }
+
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .context-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .field-row {
+        grid-template-columns: 1fr;
+      }
+
+      .status-bar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      #statusText {
+        text-align: left;
+      }
+
+      .toast-host {
+        right: 12px;
+        left: 12px;
+        top: 12px;
+      }
+
+      .toast {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+      }
+    }
+
+  script(src='https://unpkg.com/lucide@latest/dist/umd/lucide.min.js')
+
+  script.
+    const CURRENT_VERSION = '3.2.2';
+    const BUSINESS_PROCESS_API_URL = '/api/proxy/api/scripts/processes';
+    const RECENT_RECORDINGS_API_URL = '/api/proxy/api/extension/recordings/user/me';
+    const CUSTOMERS_API_URL = '/api/proxy/api/customers';
+    const INSTANCES_BY_CUSTOMER_API_URL = '/api/proxy/api/new-instances/customer';
+    const INSTANCE_DETAILS_API_URL = '/api/proxy/api/new-instances';
+
+    // Check if user is logged in
+    const authToken = localStorage.getItem('authToken');
+    if (!authToken) {
+      window.location.href = '/login';
+    }
+
+    // Fetch API base URL from config; debug mode comes from the logged-in user's profile
+    let API_BASE_URL = 'http://nitro:3050';
+    let DEBUG_MODE = false;
+
+    async function loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        API_BASE_URL = config.data ? config.data.apiBaseUrl : (config.apiBaseUrl || 'http://nitro:3050');
+      } catch (error) {
+        console.error('Failed to load config, using default');
+      }
+
+      // debug_mode is stored in localStorage when the user logs in (comes from pg-final /api/auth/login).
+      // This mirrors how the pg-final frontend reads it (AuthContext ? syncAppUserPreferences).
+      const currentUser = getParsedUser();
+      DEBUG_MODE = !!(currentUser && (currentUser.debug_mode === 1 || currentUser.debug_mode === true));
+      if (DEBUG_MODE) {
+        document.getElementById('toggleJsonBtn').style.display = '';
+      }
+    }
+
+    const configReadyPromise = loadConfig();
+
+    // Domain badge � shows which backend this recorder is connected to
+    async function checkBackendHealth() {
+      const badge = document.getElementById('domainBadge');
+      if (!badge) return;
+      try {
+        await fetch(API_BASE_URL, { method: 'HEAD', mode: 'no-cors', signal: AbortSignal.timeout(5000) });
+        badge.classList.remove('disconnected');
+      } catch (_) {
+        badge.classList.add('disconnected');
+      }
+    }
+    configReadyPromise.then(function () {
+      const badge = document.getElementById('domainBadge');
+      const badgeText = document.getElementById('domainBadgeText');
+      if (!badge || !badgeText) return;
+      try {
+        const u = new URL(API_BASE_URL);
+        const seg = u.pathname.replace(/^\//, '').split('/')[0];
+        const label = seg && !/^v\d+$/i.test(seg) ? u.hostname + '/' + seg : u.hostname;
+        badgeText.textContent = label;
+        badge.title = API_BASE_URL;
+      } catch (_) {}
+      checkBackendHealth();
+    });
+    setInterval(checkBackendHealth, 30000);
+
+    let isRecording = false;
+    let currentActions = [];
+    let recentScripts = [];
+    let referenceDataPromise = null;
+    let referenceDataLoaded = false;
+    let allBusinessProcessOptions = [];
+    let requiredTestCasePrefix = '';
+    let allCustomerOptions = [];
+    let allInstanceOptions = [];
+    let allInstanceUserOptions = [];
+    let selectedBusinessProcessOption = null;
+    let selectedCustomerOption = null;
+    let selectedInstanceOption = null;
+    let selectedInstanceUserOption = null;
+    let openLookupType = null;
+    let customerDataPromise = null;
+    let customerLookupEmptyText = 'No customer found';
+    let instanceLookupEmptyText = 'No instance found';
+    let instanceUserLookupEmptyText = 'No instance user found';
+    let lastAutoDescription = '';
+    let showAllRecentScripts = false;
+
+    const elements = {
+      recordUrl: document.getElementById('recordUrl'),
+      startRecord: document.getElementById('startRecord'),
+      stopRecord: document.getElementById('stopRecord'),
+      confirmSave: document.getElementById('confirmSave'),
+      discardRecording: document.getElementById('discardRecording'),
+      businessProcessLookup: document.getElementById('businessProcessLookup'),
+      businessProcessTrigger: document.getElementById('businessProcessTrigger'),
+      businessProcessValue: document.getElementById('businessProcessValue'),
+      businessProcessMenu: document.getElementById('businessProcessMenu'),
+      businessProcessSearch: document.getElementById('businessProcessSearch'),
+      businessProcessList: document.getElementById('businessProcessList'),
+      customerLookup: document.getElementById('customerLookup'),
+      instanceLookup: document.getElementById('instanceLookup'),
+      instanceUserLookup: document.getElementById('instanceUserLookup'),
+      customerTrigger: document.getElementById('customerTrigger'),
+      instanceTrigger: document.getElementById('instanceTrigger'),
+      instanceUserTrigger: document.getElementById('instanceUserTrigger'),
+      customerValue: document.getElementById('customerValue'),
+      instanceValue: document.getElementById('instanceValue'),
+      instanceUserValue: document.getElementById('instanceUserValue'),
+      customerSearch: document.getElementById('customerSearch'),
+      instanceSearch: document.getElementById('instanceSearch'),
+      instanceUserSearch: document.getElementById('instanceUserSearch'),
+      customerList: document.getElementById('customerList'),
+      instanceList: document.getElementById('instanceList'),
+      instanceUserList: document.getElementById('instanceUserList'),
+      testCaseName: document.getElementById('testCaseName'),
+      description: document.getElementById('description'),
+      savePanel: document.getElementById('savePanel'),
+      actionsCount: document.getElementById('actionsCount'),
+      actionsDisplay: document.getElementById('actionsDisplay'),
+      recentScriptsList: document.getElementById('recentScriptsList'),
+      recentScriptsToggle: document.getElementById('recentScriptsToggle'),
+      statusLeft: document.getElementById('statusLeft'),
+      statusText: document.getElementById('statusText'),
+      sessionUser: document.getElementById('sessionUser'),
+      lastLogin: document.getElementById('lastLogin'),
+      deviceLabel: document.getElementById('deviceLabel'),
+      toastHost: document.getElementById('toastHost'),
+      dialogOverlay: document.getElementById('dialogOverlay'),
+      dialogIcon: document.getElementById('dialogIcon'),
+      dialogTitle: document.getElementById('dialogTitle'),
+      dialogMessage: document.getElementById('dialogMessage'),
+      dialogCancel: document.getElementById('dialogCancel'),
+      dialogConfirm: document.getElementById('dialogConfirm'),
+      dialogClose: document.getElementById('dialogClose'),
+      recordModeOverlay: document.getElementById('recordModeOverlay'),
+      recordModeClose: document.getElementById('recordModeClose'),
+      recordModeCancel: document.getElementById('recordModeCancel'),
+      recordModeConfirm: document.getElementById('recordModeConfirm'),
+      instantModeRadio: document.getElementById('instantModeRadio'),
+      manualModeRadio: document.getElementById('manualModeRadio'),
+      recordModeOptions: Array.from(document.querySelectorAll('#recordModeOverlay .mode-option'))
+    };
+
+    elements.businessProcessTrigger.disabled = true;
+    elements.customerTrigger.disabled = true;
+    elements.instanceTrigger.disabled = true;
+    elements.instanceUserTrigger.disabled = true;
+
+    function setStatus(message) {
+      elements.statusText.textContent = message;
+    }
+
+    function renderLucideIcons() {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    }
+
+    let dialogResolver = null;
+
+    function getToastIcon(type) {
+      if (type === 'success') return 'circle-check';
+      if (type === 'error') return 'circle-x';
+      if (type === 'warning') return 'triangle-alert';
+      return 'info';
+    }
+
+    function closeToast(toastElement) {
+      if (!toastElement || toastElement.dataset.closing === '1') return;
+      toastElement.dataset.closing = '1';
+      toastElement.classList.add('toast-hide');
+      setTimeout(() => {
+        toastElement.remove();
+      }, 160);
+    }
+
+    function showToast(message, type = 'info', duration = 3600) {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'toast-icon-wrap';
+
+      const icon = document.createElement('i');
+      icon.className = 'toast-icon';
+      icon.setAttribute('data-lucide', getToastIcon(type));
+      icon.setAttribute('aria-hidden', 'true');
+      iconWrap.appendChild(icon);
+
+      const text = document.createElement('p');
+      text.className = 'toast-text';
+      text.textContent = message;
+
+      const closeButton = document.createElement('button');
+      closeButton.className = 'toast-close';
+      closeButton.type = 'button';
+      closeButton.setAttribute('aria-label', 'Dismiss');
+      closeButton.innerHTML = '<i data-lucide=\"x\" aria-hidden=\"true\"></i>';
+      closeButton.addEventListener('click', () => closeToast(toast));
+
+      toast.appendChild(iconWrap);
+      toast.appendChild(text);
+      toast.appendChild(closeButton);
+      elements.toastHost.appendChild(toast);
+      renderLucideIcons();
+
+      if (duration > 0) {
+        setTimeout(() => closeToast(toast), duration);
+      }
+    }
+
+    function getDialogIcon(type) {
+      if (type === 'danger') return 'triangle-alert';
+      if (type === 'warning') return 'circle-alert';
+      if (type === 'success') return 'circle-check';
+      return 'info';
+    }
+
+    function setDialogConfirmClass(type) {
+      elements.dialogConfirm.className = 'dialog-btn';
+      if (type === 'danger') {
+        elements.dialogConfirm.classList.add('dialog-btn-danger');
+        return;
+      }
+      if (type === 'warning') {
+        elements.dialogConfirm.classList.add('dialog-btn-warning');
+        return;
+      }
+      elements.dialogConfirm.classList.add('dialog-btn-primary');
+    }
+
+    function closeDialog(result) {
+      if (!elements.dialogOverlay.classList.contains('is-open')) return;
+      elements.dialogOverlay.classList.remove('is-open');
+      document.body.classList.remove('dialog-open');
+      const resolver = dialogResolver;
+      dialogResolver = null;
+      if (resolver) {
+        resolver(result);
+      }
+    }
+
+    function showDialog(options) {
+      const {
+        title = 'Notice',
+        message = '',
+        confirmText = 'OK',
+        cancelText = 'Cancel',
+        type = 'info'
+      } = options || {};
+
+      if (dialogResolver) {
+        const pending = dialogResolver;
+        dialogResolver = null;
+        pending(false);
+      }
+
+      elements.dialogTitle.textContent = title;
+      elements.dialogMessage.textContent = message;
+      elements.dialogConfirm.textContent = confirmText;
+      elements.dialogIcon.setAttribute('data-lucide', getDialogIcon(type));
+      setDialogConfirmClass(type);
+
+      if (cancelText) {
+        elements.dialogCancel.textContent = cancelText;
+        elements.dialogCancel.style.display = 'inline-flex';
+      } else {
+        elements.dialogCancel.style.display = 'none';
+      }
+
+      elements.dialogOverlay.classList.add('is-open');
+      document.body.classList.add('dialog-open');
+      renderLucideIcons();
+      setTimeout(() => elements.dialogConfirm.focus(), 0);
+
+      return new Promise((resolve) => {
+        dialogResolver = resolve;
+      });
+    }
+
+    async function withButtonLoading(button, loadingText, task) {
+      const originalHtml = button.innerHTML;
+      button.disabled = true;
+      button.classList.add('btn-loading');
+      button.innerHTML = `<i class="btn-spinner" data-lucide="loader-circle" aria-hidden="true"></i>${loadingText}`;
+      renderLucideIcons();
+
+      try {
+        return await task();
+      } finally {
+        button.innerHTML = originalHtml;
+        button.classList.remove('btn-loading');
+      }
+    }
+
+    function getApiUrl(path) {
+      return `${API_BASE_URL.replace(/\/+$/, '')}${path}`;
+    }
+
+    function pickFirstValue(record, keys) {
+      for (const key of keys) {
+        const value = record ? record[key] : null;
+        if (value !== undefined && value !== null && value !== '') {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    function extractRows(payload, preferredKeys = []) {
+      if (Array.isArray(payload)) return payload;
+      for (const key of preferredKeys) {
+        if (payload && Array.isArray(payload[key])) return payload[key];
+        if (payload && payload.data && Array.isArray(payload.data[key])) return payload.data[key];
+      }
+      if (payload && Array.isArray(payload.data)) return payload.data;
+      if (payload && payload.data && Array.isArray(payload.data.items)) return payload.data.items;
+      if (payload && Array.isArray(payload.results)) return payload.results;
+      if (payload && Array.isArray(payload.items)) return payload.items;
+      return [];
+    }
+
+    function mapOption(record, kind) {
+      if (!record || typeof record !== 'object') return null;
+      const id = pickFirstValue(record, kind === 'track'
+        ? ['id', 'track_id', 'trackId', 'value']
+        : ['id', 'module_id', 'moduleId', 'value']);
+      const label = pickFirstValue(record, kind === 'track'
+        ? ['track_name', 'trackName', 'name', 'title', 'label']
+        : ['module_name', 'moduleName', 'name', 'title', 'label']);
+      const code = pickFirstValue(record, kind === 'track'
+        ? ['track_code', 'trackCode', 'code']
+        : ['module_code', 'moduleCode', 'code']);
+      const parentTrackId = kind === 'module'
+        ? pickFirstValue(record, ['track_id', 'trackId'])
+        : id;
+
+      if (id === null || label === null) return null;
+      const safeCode = String((code || id)).toUpperCase();
+      return {
+        id: String(id),
+        label: String(label),
+        code: safeCode,
+        trackId: String(parentTrackId),
+        display: `${label} (${safeCode})`
+      };
+    }
+
+    function normalizeText(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function setLookupValue(valueElement, text, isPlaceholder) {
+      valueElement.textContent = text;
+      valueElement.classList.toggle('lookup-placeholder', Boolean(isPlaceholder));
+    }
+
+    function getLookupElements(kind) {
+      if (kind === 'businessProcess') {
+        return {
+          lookup: elements.businessProcessLookup,
+          trigger: elements.businessProcessTrigger,
+          value: elements.businessProcessValue,
+          search: elements.businessProcessSearch,
+          list: elements.businessProcessList
+        };
+      }
+      if (kind === 'customer') {
+        return {
+          lookup: elements.customerLookup,
+          trigger: elements.customerTrigger,
+          value: elements.customerValue,
+          search: elements.customerSearch,
+          list: elements.customerList
+        };
+      }
+      if (kind === 'instance') {
+        return {
+          lookup: elements.instanceLookup,
+          trigger: elements.instanceTrigger,
+          value: elements.instanceValue,
+          search: elements.instanceSearch,
+          list: elements.instanceList
+        };
+      }
+      if (kind === 'instanceUser') {
+        return {
+          lookup: elements.instanceUserLookup,
+          trigger: elements.instanceUserTrigger,
+          value: elements.instanceUserValue,
+          search: elements.instanceUserSearch,
+          list: elements.instanceUserList
+        };
+      }
+      return null;
+    }
+
+    function renderLookupByKind(kind) {
+      if (kind === 'businessProcess') {
+        renderBusinessProcessLookup();
+        return;
+      }
+      if (kind === 'customer') {
+        renderCustomerLookup();
+        return;
+      }
+      if (kind === 'instance') {
+        renderInstanceLookup();
+        return;
+      }
+      if (kind === 'instanceUser') {
+        renderInstanceUserLookup();
+      }
+    }
+
+    function setLookupLoading(kind, label) {
+      const lookup = getLookupElements(kind);
+      if (!lookup) return;
+
+      lookup.trigger.disabled = true;
+      setLookupValue(lookup.value, `Loading ${label}...`, true);
+      lookup.list.innerHTML = '<div class="lookup-empty">Loading...</div>';
+      lookup.search.value = '';
+    }
+
+    function filterOptions(options, term) {
+      const normalizedTerm = normalizeText(term);
+      if (!normalizedTerm) return options;
+      return options.filter((option) => {
+        return normalizeText(option.display).includes(normalizedTerm)
+          || normalizeText(option.label).includes(normalizedTerm)
+          || normalizeText(option.code).includes(normalizedTerm);
+      });
+    }
+
+    function renderLookupList(listElement, options, selectedId, emptyText) {
+      listElement.innerHTML = '';
+
+      if (!options.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lookup-empty';
+        empty.textContent = emptyText;
+        listElement.appendChild(empty);
+        return;
+      }
+
+      options.forEach((option) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'lookup-option';
+        button.dataset.optionId = option.id;
+        button.dataset.optionDisplay = option.display;
+
+        if (selectedId && selectedId === option.id) {
+          button.classList.add('is-selected');
+        }
+
+        const check = document.createElement('i');
+        check.className = 'lookup-check';
+        check.setAttribute('data-lucide', 'check');
+        check.setAttribute('aria-hidden', 'true');
+
+        const text = document.createElement('span');
+        text.textContent = option.display;
+
+        button.appendChild(check);
+        button.appendChild(text);
+        listElement.appendChild(button);
+      });
+    }
+
+    function renderBusinessProcessLookup() {
+      const options = filterOptions(allBusinessProcessOptions, elements.businessProcessSearch.value);
+      renderLookupList(
+        elements.businessProcessList,
+        options,
+        selectedBusinessProcessOption ? selectedBusinessProcessOption.id : null,
+        'No business process found'
+      );
+      renderLucideIcons();
+    }
+
+    function renderCustomerLookup() {
+      const options = filterOptions(allCustomerOptions, elements.customerSearch.value);
+      renderLookupList(
+        elements.customerList,
+        options,
+        selectedCustomerOption ? selectedCustomerOption.id : null,
+        customerLookupEmptyText
+      );
+      renderLucideIcons();
+    }
+
+    function renderInstanceLookup() {
+      const options = filterOptions(allInstanceOptions, elements.instanceSearch.value);
+      renderLookupList(
+        elements.instanceList,
+        options,
+        selectedInstanceOption ? selectedInstanceOption.id : null,
+        instanceLookupEmptyText
+      );
+      renderLucideIcons();
+    }
+
+    function renderInstanceUserLookup() {
+      const options = filterOptions(allInstanceUserOptions, elements.instanceUserSearch.value);
+      renderLookupList(
+        elements.instanceUserList,
+        options,
+        selectedInstanceUserOption ? selectedInstanceUserOption.id : null,
+        instanceUserLookupEmptyText
+      );
+      renderLucideIcons();
+    }
+
+    function closeLookups() {
+      const lookupContainers = [
+        elements.businessProcessLookup,
+        elements.customerLookup,
+        elements.instanceLookup,
+        elements.instanceUserLookup
+      ];
+      lookupContainers.forEach((lookup) => lookup.classList.remove('is-open'));
+      openLookupType = null;
+    }
+
+    function openLookup(kind) {
+      const lookup = getLookupElements(kind);
+      if (!lookup || lookup.trigger.disabled) return;
+
+      closeLookups();
+      lookup.lookup.classList.add('is-open');
+      openLookupType = kind;
+      renderLookupByKind(kind);
+      setTimeout(() => lookup.search.focus(), 0);
+    }
+
+    function toggleLookup(kind) {
+      if (openLookupType === kind) {
+        closeLookups();
+        return;
+      }
+      openLookup(kind);
+    }
+
+    function toTypedId(value) {
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? value : numeric;
+    }
+
+    function formatTitleTimestamp(date) {
+      const pad = (value) => String(value).padStart(2, '0');
+      return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+    }
+
+    function mapCustomerOption(record) {
+      const id = pickFirstValue(record, ['id', 'customer_id', 'customerId']);
+      const name = pickFirstValue(record, ['customer_name', 'name', 'label', 'title']);
+      if (id === null || name === null) return null;
+      return {
+        id: String(id),
+        label: String(name),
+        code: String(id),
+        display: String(name)
+      };
+    }
+
+    function mapInstanceOption(record) {
+      const id = pickFirstValue(record, ['instance_id', 'id', 'instanceId']);
+      const name = pickFirstValue(record, ['instance_name', 'name', 'label', 'title']);
+      if (id === null || name === null) return null;
+      return {
+        id: String(id),
+        label: String(name),
+        code: String(id),
+        display: String(name)
+      };
+    }
+
+    function mapInstanceUserOption(record) {
+      const id = pickFirstValue(record, ['instance_user_id', 'id', 'instanceUserId']);
+      if (id === null) return null;
+      const userLabel = `User ${id}`;
+      return {
+        id: String(id),
+        label: userLabel,
+        code: String(id),
+        display: userLabel
+      };
+    }
+
+    function resetInstanceUserSelection(placeholderText = 'Select instance user') {
+      allInstanceUserOptions = [];
+      selectedInstanceUserOption = null;
+      instanceUserLookupEmptyText = placeholderText;
+      elements.instanceUserSearch.value = '';
+      elements.instanceUserTrigger.disabled = true;
+      setLookupValue(elements.instanceUserValue, placeholderText, true);
+      renderInstanceUserLookup();
+    }
+
+    function resetInstanceSelection(placeholderText = 'Select instance') {
+      allInstanceOptions = [];
+      selectedInstanceOption = null;
+      instanceLookupEmptyText = placeholderText;
+      elements.instanceSearch.value = '';
+      elements.instanceTrigger.disabled = true;
+      setLookupValue(elements.instanceValue, placeholderText, true);
+      renderInstanceLookup();
+      resetInstanceUserSelection('Select instance first');
+    }
+
+    function resetCustomerSelection(placeholderText = 'Select customer') {
+      allCustomerOptions = [];
+      selectedCustomerOption = null;
+      customerLookupEmptyText = placeholderText;
+      elements.customerSearch.value = '';
+      elements.customerTrigger.disabled = true;
+      setLookupValue(elements.customerValue, placeholderText, true);
+      renderCustomerLookup();
+      resetInstanceSelection('Select customer first');
+    }
+
+    function getAuthHeaders() {
+      const token = localStorage.getItem('authToken');
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    function checkAuthResponse(response) {
+      // Check if response is unauthorized or forbidden
+      if (response.status === 401 || response.status === 403) {
+        // Clear token and redirect to login
+        localStorage.removeItem('authToken');
+        showToast('Session expired. Please login again.', 'warning');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1500);
+        throw new Error('Session expired');
+      }
+      return response;
+    }
+
+    async function loadCustomerOptions(force = false) {
+      await configReadyPromise;
+
+      if (customerDataPromise && !force) {
+        return customerDataPromise;
+      }
+
+      setLookupLoading('customer', 'customers');
+      resetInstanceSelection('Select customer first');
+
+      customerDataPromise = (async () => {
+        try {
+          const response = await fetch(CUSTOMERS_API_URL, {
+            method: 'GET',
+            headers: getAuthHeaders()
+          });
+
+          checkAuthResponse(response);
+
+          if (!response.ok) {
+            throw new Error('Unable to load customers.');
+          }
+
+          const payload = await response.json();
+          const customerOptions = extractRows(payload, ['customers'])
+            .map(mapCustomerOption)
+            .filter(Boolean);
+
+          allCustomerOptions = customerOptions;
+          selectedCustomerOption = null;
+
+          if (!customerOptions.length) {
+            customerLookupEmptyText = 'No customer found';
+            elements.customerSearch.value = '';
+            elements.customerTrigger.disabled = true;
+            setLookupValue(elements.customerValue, 'No customers found', true);
+            renderCustomerLookup();
+            return false;
+          }
+
+          customerLookupEmptyText = 'No customer found';
+          elements.customerSearch.value = '';
+          elements.customerTrigger.disabled = false;
+          setLookupValue(elements.customerValue, 'Select customer', true);
+          renderCustomerLookup();
+          return true;
+        } catch (error) {
+          allCustomerOptions = [];
+          selectedCustomerOption = null;
+          customerLookupEmptyText = 'Customer unavailable';
+          elements.customerSearch.value = '';
+          elements.customerTrigger.disabled = true;
+          setLookupValue(elements.customerValue, 'Customer unavailable', true);
+          renderCustomerLookup();
+          resetInstanceSelection('Select customer first');
+          showToast(error.message || 'Failed to load customers.', 'error');
+          return false;
+        } finally {
+          customerDataPromise = null;
+        }
+      })();
+
+      return customerDataPromise;
+    }
+
+    async function loadInstancesByCustomer(customerId) {
+      if (!customerId) {
+        resetInstanceSelection('Select customer first');
+        return false;
+      }
+
+      setLookupLoading('instance', 'instances');
+      resetInstanceUserSelection('Select instance first');
+
+      try {
+        const response = await fetch(`${INSTANCES_BY_CUSTOMER_API_URL}/${encodeURIComponent(customerId)}`, {
+          method: 'GET',
+          headers: getAuthHeaders()
+        });
+
+        checkAuthResponse(response);
+
+        if (!response.ok) {
+          throw new Error('Unable to load instances.');
+        }
+
+        const payload = await response.json();
+        const instanceOptions = extractRows(payload, ['instances'])
+          .map(mapInstanceOption)
+          .filter(Boolean);
+
+        allInstanceOptions = instanceOptions;
+        selectedInstanceOption = null;
+
+        if (!instanceOptions.length) {
+          instanceLookupEmptyText = 'No instance found';
+          elements.instanceSearch.value = '';
+          elements.instanceTrigger.disabled = true;
+          setLookupValue(elements.instanceValue, 'No instances found', true);
+          renderInstanceLookup();
+          return false;
+        }
+
+        instanceLookupEmptyText = 'No instance found';
+        elements.instanceSearch.value = '';
+        elements.instanceTrigger.disabled = false;
+        setLookupValue(elements.instanceValue, 'Select instance', true);
+        renderInstanceLookup();
+        return true;
+      } catch (error) {
+        allInstanceOptions = [];
+        selectedInstanceOption = null;
+        instanceLookupEmptyText = 'Instance unavailable';
+        elements.instanceSearch.value = '';
+        elements.instanceTrigger.disabled = true;
+        setLookupValue(elements.instanceValue, 'Instance unavailable', true);
+        renderInstanceLookup();
+        resetInstanceUserSelection('Select instance first');
+        showToast(error.message || 'Failed to load instances.', 'error');
+        return false;
+      }
+    }
+
+    async function loadInstanceUsers(instanceId) {
+      if (!instanceId) {
+        resetInstanceUserSelection('Select instance first');
+        return false;
+      }
+
+      setLookupLoading('instanceUser', 'instance users');
+
+      try {
+        const response = await fetch(`${INSTANCE_DETAILS_API_URL}/${encodeURIComponent(instanceId)}`, {
+          method: 'GET',
+          headers: getAuthHeaders()
+        });
+
+        checkAuthResponse(response);
+
+        if (!response.ok) {
+          throw new Error('Unable to load instance users.');
+        }
+
+        const payload = await response.json();
+        const instanceUsers = payload && payload.data && payload.data.instance && Array.isArray(payload.data.instance.users)
+          ? payload.data.instance.users
+          : [];
+        const instanceUserOptions = instanceUsers
+          .map(mapInstanceUserOption)
+          .filter(Boolean);
+
+        allInstanceUserOptions = instanceUserOptions;
+        selectedInstanceUserOption = null;
+
+        if (!instanceUserOptions.length) {
+          instanceUserLookupEmptyText = 'No instance user found';
+          elements.instanceUserSearch.value = '';
+          elements.instanceUserTrigger.disabled = true;
+          setLookupValue(elements.instanceUserValue, 'No instance users found', true);
+          renderInstanceUserLookup();
+          return false;
+        }
+
+        const firstUser = instanceUserOptions[0];
+        selectedInstanceUserOption = firstUser;
+        instanceUserLookupEmptyText = 'No instance user found';
+        elements.instanceUserSearch.value = '';
+        elements.instanceUserTrigger.disabled = false;
+        setLookupValue(elements.instanceUserValue, firstUser.display, false);
+        renderInstanceUserLookup();
+        return true;
+      } catch (error) {
+        allInstanceUserOptions = [];
+        selectedInstanceUserOption = null;
+        instanceUserLookupEmptyText = 'Instance user unavailable';
+        elements.instanceUserSearch.value = '';
+        elements.instanceUserTrigger.disabled = true;
+        setLookupValue(elements.instanceUserValue, 'Instance user unavailable', true);
+        renderInstanceUserLookup();
+        showToast(error.message || 'Failed to load instance users.', 'error');
+        return false;
+      }
+    }
+
+    async function loadBusinessProcessOptions(force = false) {
+      await configReadyPromise;
+
+      if (referenceDataLoaded && !force) {
+        return true;
+      }
+
+      if (referenceDataPromise && !force) {
+        return referenceDataPromise;
+      }
+
+      setLookupLoading('businessProcess', 'business processes');
+      closeLookups();
+
+      referenceDataPromise = (async () => {
+        try {
+          const token = localStorage.getItem('authToken');
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+          const response = await fetch(BUSINESS_PROCESS_API_URL, { method: 'GET', headers });
+          checkAuthResponse(response);
+
+          if (!response.ok) {
+            throw new Error('Unable to load business processes.');
+          }
+
+          const payload = await response.json();
+          const rawList = Array.isArray(payload) ? payload : (Array.isArray(payload.data) ? payload.data : []);
+          const options = rawList
+            .map((item) => {
+              const id = item.mp_id;
+              const name = item.process_name;
+              if (!id || !name) return null;
+              return { id: String(id), value: name, display: name };
+            })
+            .filter(Boolean);
+
+          allBusinessProcessOptions = options;
+          selectedBusinessProcessOption = null;
+          elements.businessProcessSearch.value = '';
+          elements.businessProcessTrigger.disabled = options.length === 0;
+          if (options.length) {
+            setLookupValue(elements.businessProcessValue, 'Select business process', true);
+          } else {
+            setLookupValue(elements.businessProcessValue, 'Business process unavailable', true);
+          }
+          renderBusinessProcessLookup();
+
+          if (!options.length) {
+            showToast('Business process list is empty. Please check API data.', 'warning');
+          }
+
+          referenceDataLoaded = options.length > 0;
+          return options.length > 0;
+        } catch (error) {
+          allBusinessProcessOptions = [];
+          selectedBusinessProcessOption = null;
+          elements.businessProcessSearch.value = '';
+          elements.businessProcessTrigger.disabled = true;
+          setLookupValue(elements.businessProcessValue, 'Business process unavailable', true);
+          renderBusinessProcessLookup();
+          referenceDataLoaded = false;
+          showToast(error.message || 'Failed to load business process options.', 'error');
+          return false;
+        } finally {
+          referenceDataPromise = null;
+        }
+      })();
+
+      return referenceDataPromise;
+    }
+
+    function getParsedUser() {
+      const userStr = localStorage.getItem('user');
+      if (!userStr) return null;
+      try {
+        return JSON.parse(userStr);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        return null;
+      }
+    }
+
+    function getQueryParam(name) {
+      const search = new URLSearchParams(window.location.search);
+      return search.get(name);
+    }
+
+    function getHostName(urlValue) {
+      try {
+        return new URL(urlValue).hostname;
+      } catch (error) {
+        return '-';
+      }
+    }
+
+    function formatTimeAgo(isoString) {
+      const diff = Date.now() - new Date(isoString).getTime();
+      const days = Math.floor(diff / 86400000);
+      if (days <= 0) return 'Today';
+      if (days === 1) return '1 day ago';
+      return `${days} days ago`;
+    }
+
+    function detectPlatform() {
+      const platform = navigator.platform || '';
+      if (platform.includes('Mac')) return 'Chrome / macOS';
+      if (platform.includes('Win')) return 'Chrome / Win';
+      return 'Chrome / Linux';
+    }
+
+    function getLoggedInDisplayName() {
+      const user = getParsedUser();
+      if (!user) return 'User';
+      return user.full_name || user.username || user.email || 'User';
+    }
+
+    function formatRecordedOnDate(date) {
+      const day = date.getDate();
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      const year = date.getFullYear();
+      const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      return `${day}${month}, ${year} ${time}`;
+    }
+
+    function setDefaultDescription(force = false) {
+      const now = new Date();
+      const bpText = selectedBusinessProcessOption ? ` for ${selectedBusinessProcessOption.label}` : '';
+      const generatedDescription = `New Test script recorded by ${getLoggedInDisplayName()}${bpText} on ${formatRecordedOnDate(now)}.`;
+      const currentDescription = elements.description.value.trim();
+
+      if (force || !currentDescription || currentDescription === lastAutoDescription) {
+        elements.description.value = generatedDescription;
+        lastAutoDescription = generatedDescription;
+      }
+    }
+
+    function applyTestCasePrefix() {
+      if (!selectedBusinessProcessOption) {
+        requiredTestCasePrefix = '';
+        return;
+      }
+      requiredTestCasePrefix = '';
+      elements.testCaseName.value = requiredTestCasePrefix;
+    }
+
+    function handleBusinessProcessOptionPick(optionId) {
+      const picked = allBusinessProcessOptions.find((bp) => bp.id === String(optionId));
+      if (!picked) return;
+
+      selectedBusinessProcessOption = picked;
+      setLookupValue(elements.businessProcessValue, picked.value, false);
+      applyTestCasePrefix();
+      setDefaultDescription();
+      closeLookups();
+    }
+
+    async function handleCustomerOptionPick(optionId) {
+      const pickedCustomer = allCustomerOptions.find((customer) => customer.id === String(optionId));
+      if (!pickedCustomer) return;
+
+      selectedCustomerOption = pickedCustomer;
+      setLookupValue(elements.customerValue, pickedCustomer.display, false);
+      closeLookups();
+      const hasInstances = await loadInstancesByCustomer(pickedCustomer.id);
+      if (hasInstances) {
+        openLookup('instance');
+      }
+    }
+
+    async function handleInstanceOptionPick(optionId) {
+      const pickedInstance = allInstanceOptions.find((instance) => instance.id === String(optionId));
+      if (!pickedInstance) return;
+
+      selectedInstanceOption = pickedInstance;
+      setLookupValue(elements.instanceValue, pickedInstance.display, false);
+      closeLookups();
+      await loadInstanceUsers(pickedInstance.id);
+    }
+
+    function handleInstanceUserOptionPick(optionId) {
+      const pickedInstanceUser = allInstanceUserOptions.find((instanceUser) => instanceUser.id === String(optionId));
+      if (!pickedInstanceUser) return;
+
+      selectedInstanceUserOption = pickedInstanceUser;
+      setLookupValue(elements.instanceUserValue, pickedInstanceUser.display, false);
+      closeLookups();
+    }
+
+    function hydrateContext() {
+      const user = getParsedUser();
+      const recordingAs = user ? (user.full_name || user.username || user.email || '-') : '-';
+      elements.sessionUser.textContent = recordingAs;
+      elements.statusLeft.textContent = '';
+      elements.lastLogin.textContent = `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      elements.deviceLabel.textContent = detectPlatform();
+      document.title = `FlowTrace Recorder V${CURRENT_VERSION}`;
+    }
+
+    function extractContextFromDescription(description) {
+      const text = String(description || '').trim();
+      if (!text) return 'Script';
+      const moduleMatch = text.match(/\bfor\s+(.+?)\s+on\b/i);
+      if (moduleMatch && moduleMatch[1]) {
+        return moduleMatch[1].trim();
+      }
+      return 'Script';
+    }
+
+    function mapRecentScript(record) {
+      if (!record || typeof record !== 'object') return null;
+
+      const id = pickFirstValue(record, ['id']);
+      const title = pickFirstValue(record, ['title', 'name']);
+      const createdAt = pickFirstValue(record, ['created_at', 'createdAt', 'updated_at', 'updatedAt']) || new Date().toISOString();
+      const rawSteps = Array.isArray(record.steps) ? record.steps : null;
+      const stepsCount = rawSteps
+        ? rawSteps.length
+        : Number(pickFirstValue(record, ['step_count', 'steps_count', 'stepsCount']) || 0);
+
+      if (!title) return null;
+
+      return {
+        id: String(id || title),
+        name: String(title),
+        steps: Number.isFinite(stepsCount) ? stepsCount : 0,
+        context: extractContextFromDescription(record.description),
+        createdAt,
+        rawSteps  // preserved for debug JSON viewer
+      };
+    }
+
+    function getVisibleRecentScripts() {
+      if (showAllRecentScripts) return recentScripts;
+      return recentScripts.slice(0, 5);
+    }
+
+    function updateRecentScriptsToggle() {
+      const hasMoreThanFive = recentScripts.length > 5;
+      elements.recentScriptsToggle.style.display = hasMoreThanFive ? 'inline-flex' : 'none';
+      elements.recentScriptsToggle.textContent = showAllRecentScripts ? 'Show Less' : 'Show All';
+    }
+
+    function renderRecentScripts() {
+      if (!recentScripts.length) {
+        elements.recentScriptsList.className = 'recent-scripts-list empty-row';
+        elements.recentScriptsList.textContent = 'No scripts saved yet.';
+        updateRecentScriptsToggle();
+        return;
+      }
+
+      elements.recentScriptsList.className = 'recent-scripts-list';
+      elements.recentScriptsList.textContent = '';
+
+      const visibleScripts = getVisibleRecentScripts();
+
+      visibleScripts.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'script-row';
+
+        const left = document.createElement('div');
+        left.className = 'script-left';
+
+        const fileIcon = document.createElement('i');
+        fileIcon.className = 'script-file-icon';
+        fileIcon.setAttribute('data-lucide', 'file-text');
+        fileIcon.setAttribute('aria-hidden', 'true');
+
+        const textWrap = document.createElement('div');
+        textWrap.className = 'script-text';
+
+        const name = document.createElement('p');
+        name.className = 'script-name';
+        name.textContent = item.name;
+
+        const meta = document.createElement('p');
+        meta.className = 'script-meta';
+        meta.textContent = `${item.context} - ${item.steps} steps`;
+
+        textWrap.appendChild(name);
+        textWrap.appendChild(meta);
+        left.appendChild(fileIcon);
+        left.appendChild(textWrap);
+
+        const time = document.createElement('span');
+        time.className = 'script-time';
+        time.textContent = formatTimeAgo(item.createdAt);
+
+        row.appendChild(left);
+        row.appendChild(time);
+
+        // Debug mode: clicking the row loads this script's actions into the Recorded Actions panel below
+        if (DEBUG_MODE && item.rawSteps) {
+          const jsonIcon = document.createElement('span');
+          jsonIcon.className = 'toggle-json-btn';
+          jsonIcon.style.cssText = 'margin-left:8px;padding:2px 6px;flex-shrink:0;display:inline-flex;align-items:center;pointer-events:none;';
+          jsonIcon.title = 'View actions in Recorded Actions panel';
+          jsonIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"></path><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"></path></svg>';
+          row.appendChild(jsonIcon);
+
+          row.classList.add('is-clickable');
+          row.setAttribute('role', 'button');
+          row.setAttribute('tabindex', '0');
+          const loadIntoPanel = () => {
+            displayActions(item.rawSteps);
+            elements.actionsCount.textContent = `${item.name} � ${item.rawSteps.length} steps`;
+            document.getElementById('stepsTable').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          };
+          row.addEventListener('click', loadIntoPanel);
+          row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadIntoPanel(); }
+          });
+        }
+
+        elements.recentScriptsList.appendChild(row);
+      });
+
+      updateRecentScriptsToggle();
+      renderLucideIcons();
+    }
+
+    async function loadRecentScripts(silent = false) {
+      try {
+        await configReadyPromise;
+        elements.recentScriptsList.className = 'recent-scripts-list empty-row';
+        elements.recentScriptsList.textContent = 'Loading scripts...';
+        elements.recentScriptsToggle.style.display = 'none';
+
+        const token = localStorage.getItem('authToken');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await fetch(RECENT_RECORDINGS_API_URL, {
+          method: 'GET',
+          headers
+        });
+
+        checkAuthResponse(response);
+
+        if (!response.ok) {
+          throw new Error('Unable to load recent scripts.');
+        }
+
+        const payload = await response.json();
+        recentScripts = extractRows(payload, ['recordings'])
+          .map((item) => mapRecentScript(item))
+          .filter(Boolean)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        showAllRecentScripts = false;
+      } catch (error) {
+        recentScripts = [];
+        showAllRecentScripts = false;
+        if (!silent) {
+          showToast(error.message || 'Failed to load recent scripts.', 'error');
+        }
+      }
+      renderRecentScripts();
+    }
+
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function getStepName(action) {
+      const code = action.code || '';
+      if (code.includes('.goto(')) return 'Navigate to URL';
+      if (code.includes('.fill(')) {
+        const m = code.match(/name:\s*['"]([^'"]+)['"]/);
+        const l = code.match(/getByLabel\(['"]([^'"]+)['"]\)/);
+        const p = code.match(/getByPlaceholder\(['"]([^'"]+)['"]\)/);
+        return 'Fill ' + ((m && m[1]) || (l && l[1]) || (p && p[1]) || 'field');
+      }
+      if (code.includes('.selectOption(')) return 'Select ' + (action.value || 'option');
+      if (code.includes('.press(')) return 'Press ' + (action.key || 'key');
+      if (code.includes('.click()')) {
+        const m2 = code.match(/name:\s*['"]([^'"]+)['"]/);
+        const t = code.match(/getByTitle\(['"]([^'"]+)['"]\)/);
+        const txt = code.match(/getByText\(['"]([^'"]+)['"]\)/);
+        return 'Click ' + ((m2 && m2[1]) || (t && t[1]) || (txt && txt[1]) || 'element');
+      }
+      return action.type || 'Action';
+    }
+
+    function getStepValue(action) {
+      if (action.committedValue !== undefined && action.committedValue !== null && action.committedValue !== '') return String(action.committedValue);
+      if (action.originalValue !== undefined && action.originalValue !== null) return String(action.originalValue);
+      if (action.value) return String(action.value);
+      const code = action.code || '';
+      if (code.includes('.fill(')) { const m = code.match(/fill\(['"]([^'"]+)['"]\)/); return m ? m[1] : '-'; }
+      if (code.includes('.goto(')) { const m2 = code.match(/goto\(['"]([^'"]+)['"]\)/); return m2 ? m2[1] : '-'; }
+      return '-';
+    }
+
+    function renderStepsTable(actions) {
+      const table = document.getElementById('stepsTable');
+      if (!actions.length) {
+        table.innerHTML = '';
+        return;
+      }
+      let html = '<table><thead><tr><th>S No</th><th>Step Name</th><th>Original Value</th></tr></thead><tbody>';
+      actions.forEach((action, i) => {
+        const name = action.description || getStepName(action);
+        const value = getStepValue(action);
+        html += `<tr><td>${i + 1}</td><td>${escHtml(name)}</td><td class="step-value">${escHtml(value)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      table.innerHTML = html;
+    }
+
+    let jsonVisible = false;
+    document.getElementById('toggleJsonBtn').addEventListener('click', function () {
+      jsonVisible = !jsonVisible;
+      document.getElementById('stepsTable').style.display = jsonVisible ? 'none' : '';
+      document.getElementById('actionsDisplay').style.display = jsonVisible ? '' : 'none';
+      this.textContent = jsonVisible ? 'Show Script' : 'Show JSON';
+    });
+
+    function displayActions(actions) {
+      elements.actionsCount.textContent = `Actions: ${actions.length}`;
+      elements.actionsDisplay.textContent = JSON.stringify(actions, null, 2);
+      const toggleBtn = document.getElementById('toggleJsonBtn');
+      jsonVisible = false;
+      document.getElementById('stepsTable').style.display = '';
+      elements.actionsDisplay.style.display = 'none';
+      toggleBtn.textContent = 'Show JSON';
+      if (!actions.length) {
+        document.getElementById('stepsTable').innerHTML = '';
+        toggleBtn.style.display = 'none';
+        return;
+      }
+      toggleBtn.style.display = DEBUG_MODE ? '' : 'none';
+      renderStepsTable(actions);
+    }
+
+    function resetSavePanelState() {
+      closeLookups();
+      elements.businessProcessSearch.value = '';
+      elements.customerSearch.value = '';
+      elements.instanceSearch.value = '';
+      elements.instanceUserSearch.value = '';
+      elements.testCaseName.value = '';
+      elements.description.value = '';
+      lastAutoDescription = '';
+
+      selectedBusinessProcessOption = null;
+      selectedCustomerOption = null;
+      selectedInstanceOption = null;
+      selectedInstanceUserOption = null;
+      requiredTestCasePrefix = '';
+
+      elements.businessProcessTrigger.disabled = allBusinessProcessOptions.length === 0;
+      if (allBusinessProcessOptions.length) {
+        setLookupValue(elements.businessProcessValue, 'Select business process', true);
+      } else {
+        setLookupValue(elements.businessProcessValue, 'Business process unavailable', true);
+      }
+      renderBusinessProcessLookup();
+
+      resetCustomerSelection();
+    }
+
+    function discardCurrentRecording() {
+      currentActions = [];
+      displayActions([]);
+      resetSavePanelState();
+      elements.savePanel.style.display = 'none';
+      elements.confirmSave.disabled = false;
+      setStatus('Recording discarded');
+      showToast('Recording discarded and reset.', 'info');
+    }
+
+    async function openSavePanelForCurrentRecording() {
+      elements.savePanel.style.display = 'block';
+      setStatus('Ready to save recording');
+      resetSavePanelState();
+      setDefaultDescription(true);
+      elements.confirmSave.disabled = true;
+
+      const [optionsReady, customersReady] = await Promise.all([
+        loadBusinessProcessOptions(),
+        loadCustomerOptions(true)
+      ]);
+
+      elements.confirmSave.disabled = !(optionsReady && customersReady);
+      if (!optionsReady && !customersReady) {
+        setStatus('Business process and customer list unavailable');
+      } else if (!optionsReady) {
+        setStatus('Business process list unavailable');
+      } else if (!customersReady) {
+        setStatus('Customer list unavailable');
+      } else {
+        setStatus('Select details and save recording');
+        closeLookups();
+      }
+    }
+
+    elements.dialogConfirm.addEventListener('click', () => closeDialog(true));
+    elements.dialogCancel.addEventListener('click', () => closeDialog(false));
+    elements.dialogClose.addEventListener('click', () => closeDialog(false));
+    elements.dialogOverlay.addEventListener('click', (event) => {
+      if (event.target === elements.dialogOverlay) {
+        closeDialog(false);
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && elements.dialogOverlay.classList.contains('is-open')) {
+        closeDialog(false);
+        return;
+      }
+      if (event.key === 'Escape' && openLookupType) {
+        closeLookups();
+      }
+    });
+
+    // Initial dynamic UI values
+    hydrateContext();
+    loadRecentScripts(true);
+    renderLucideIcons();
+
+    // Keep context in sync with URL input
+    elements.recordUrl.addEventListener('input', () => {
+      hydrateContext();
+    });
+
+    elements.businessProcessTrigger.addEventListener('click', () => toggleLookup('businessProcess'));
+    elements.customerTrigger.addEventListener('click', () => toggleLookup('customer'));
+    elements.instanceTrigger.addEventListener('click', () => toggleLookup('instance'));
+    elements.instanceUserTrigger.addEventListener('click', () => toggleLookup('instanceUser'));
+
+    elements.businessProcessSearch.addEventListener('input', () => renderBusinessProcessLookup());
+    elements.customerSearch.addEventListener('input', () => renderCustomerLookup());
+    elements.instanceSearch.addEventListener('input', () => renderInstanceLookup());
+    elements.instanceUserSearch.addEventListener('input', () => renderInstanceUserLookup());
+
+    elements.businessProcessList.addEventListener('click', (event) => {
+      const optionButton = event.target.closest('.lookup-option[data-option-id]');
+      if (!optionButton) return;
+      handleBusinessProcessOptionPick(optionButton.dataset.optionId);
+    });
+
+    elements.customerList.addEventListener('click', async (event) => {
+      const optionButton = event.target.closest('.lookup-option[data-option-id]');
+      if (!optionButton) return;
+      await handleCustomerOptionPick(optionButton.dataset.optionId);
+    });
+
+    elements.instanceList.addEventListener('click', async (event) => {
+      const optionButton = event.target.closest('.lookup-option[data-option-id]');
+      if (!optionButton) return;
+      await handleInstanceOptionPick(optionButton.dataset.optionId);
+    });
+
+    elements.instanceUserList.addEventListener('click', (event) => {
+      const optionButton = event.target.closest('.lookup-option[data-option-id]');
+      if (!optionButton) return;
+      handleInstanceUserOptionPick(optionButton.dataset.optionId);
+    });
+
+    elements.recentScriptsToggle.addEventListener('click', () => {
+      showAllRecentScripts = !showAllRecentScripts;
+      renderRecentScripts();
+    });
+
+    document.addEventListener('click', (event) => {
+      const allLookups = [
+        elements.businessProcessLookup,
+        elements.customerLookup,
+        elements.instanceLookup,
+        elements.instanceUserLookup
+      ];
+      if (allLookups.some((lookup) => lookup.contains(event.target))) {
+        return;
+      }
+      closeLookups();
+    });
+
+    // Logout functionality
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      const shouldLogout = await showDialog({
+        title: 'Sign Out',
+        message: 'Are you sure you want to logout from FlowTrace Recorder?',
+        confirmText: 'Logout',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+
+      if (!shouldLogout) return;
+
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    });
+
+    // Window chrome actions
+    document.getElementById('navBack').addEventListener('click', () => {
+      window.history.back();
+    });
+
+    document.getElementById('navRefresh').addEventListener('click', () => {
+      hydrateContext();
+      setStatus('Context refreshed');
+    });
+
+    function syncRecordModeOptionState() {
+      elements.recordModeOptions.forEach((option) => {
+        const modeInput = option.querySelector('input[type="radio"]');
+        option.classList.toggle('is-selected', Boolean(modeInput && modeInput.checked));
+      });
+    }
+
+    elements.recordModeOptions.forEach((option) => {
+      option.addEventListener('click', () => {
+        const modeInput = option.querySelector('input[type="radio"]');
+        if (!modeInput) return;
+        modeInput.checked = true;
+        syncRecordModeOptionState();
+      });
+    });
+
+    elements.manualModeRadio.addEventListener('change', syncRecordModeOptionState);
+    elements.instantModeRadio.addEventListener('change', syncRecordModeOptionState);
+
+    // Show recording mode modal
+    elements.startRecord.addEventListener('click', () => {
+      elements.manualModeRadio.checked = true;
+      syncRecordModeOptionState();
+      elements.recordModeOverlay.classList.add('is-open');
+      document.body.classList.add('dialog-open');
+      renderLucideIcons();
+    });
+
+    // Close recording mode modal
+    function closeRecordModeModal() {
+      elements.recordModeOverlay.classList.remove('is-open');
+      document.body.classList.remove('dialog-open');
+    }
+
+    elements.recordModeClose.addEventListener('click', closeRecordModeModal);
+    elements.recordModeCancel.addEventListener('click', closeRecordModeModal);
+
+    elements.recordModeOverlay.addEventListener('click', (event) => {
+      if (event.target === elements.recordModeOverlay) {
+        closeRecordModeModal();
+      }
+    });
+
+    // Start recording based on selected mode
+    elements.recordModeConfirm.addEventListener('click', async () => {
+      const isManualMode = elements.manualModeRadio.checked;
+      const url = elements.recordUrl.value.trim();
+
+      // Validate URL for Record Navigation Path mode
+      if (!isManualMode && !url) {
+        showToast('Please enter a URL for Record Navigation Path mode.', 'warning');
+        return;
+      }
+
+      closeRecordModeModal();
+
+      await withButtonLoading(elements.startRecord, 'Starting...', async () => {
+        try {
+          setStatus('Starting recording...');
+
+          const response = await fetch('/api/record/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: url || '',
+              mode: isManualMode ? 'manual' : 'instant'
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            isRecording = true;
+            elements.startRecord.disabled = true;
+            elements.stopRecord.disabled = false;
+            elements.recordUrl.disabled = true;
+            setStatus('Recording started');
+
+            const modeMessage = isManualMode
+              ? 'Browser opened. Navigate manually to your desired page and perform your actions. Close the browser when finished.'
+              : 'Browser will navigate to the URL. Perform your actions, then close the browser when done.';
+
+            await showDialog({
+              title: 'Recording Started',
+              message: data.message || modeMessage,
+              confirmText: 'Ok',
+              cancelText: '',
+              type: 'success'
+            });
+          } else {
+            elements.startRecord.disabled = false;
+            setStatus('Start failed');
+            showToast(data.error || 'Failed to start recording.', 'error');
+          }
+        } catch (error) {
+          elements.startRecord.disabled = false;
+          setStatus('Start failed');
+          showToast(error.message || 'Failed to start recording.', 'error');
+        }
+      });
+    });
+
+    // Stop recording
+    elements.stopRecord.addEventListener('click', async () => {
+      await withButtonLoading(elements.stopRecord, 'Stopping...', async () => {
+        try {
+          setStatus('Stopping recording...');
+
+          const response = await fetch('/api/record/stop', {
+            method: 'POST'
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            isRecording = false;
+            currentActions = data.actions || [];
+            elements.startRecord.disabled = false;
+            elements.stopRecord.disabled = true;
+            elements.recordUrl.disabled = false;
+            displayActions(currentActions);
+            setStatus(`Stopped - ${data.count} actions`);
+            showToast(`Recording stopped. ${data.count} actions captured.`, 'success');
+            await openSavePanelForCurrentRecording();
+          } else {
+            elements.stopRecord.disabled = false;
+            setStatus('Stop failed');
+            showToast(data.error || 'Failed to stop recording.', 'error');
+          }
+        } catch (error) {
+          elements.stopRecord.disabled = false;
+          setStatus('Stop failed');
+          showToast(error.message || 'Failed to stop recording.', 'error');
+        }
+      });
+    });
+
+    elements.discardRecording.addEventListener('click', () => {
+      discardCurrentRecording();
+    });
+
+    elements.confirmSave.addEventListener('click', async () => {
+      const testCaseName = elements.testCaseName.value.trim();
+      const description = elements.description.value.trim();
+      const token = localStorage.getItem('authToken');
+
+      if (!selectedBusinessProcessOption) {
+        showToast('Please select a business process before saving.', 'warning');
+        return;
+      }
+
+      if (!testCaseName) {
+        showToast('Please enter a test case name before saving.', 'warning');
+        return;
+      }
+
+      if (!description) {
+        showToast('Please enter description before saving.', 'warning');
+        return;
+      }
+
+      if (!selectedCustomerOption) {
+        showToast('Please select a customer before saving.', 'warning');
+        return;
+      }
+
+      if (!selectedInstanceOption) {
+        showToast('Please select an instance before saving.', 'warning');
+        return;
+      }
+
+      if (!selectedInstanceUserOption) {
+        showToast('Please select an instance user before saving.', 'warning');
+        return;
+      }
+
+      if (requiredTestCasePrefix) {
+        const normalizedName = testCaseName.toUpperCase();
+        const normalizedPrefix = requiredTestCasePrefix.toUpperCase();
+        if (!normalizedName.startsWith(normalizedPrefix) || testCaseName.length <= requiredTestCasePrefix.length) {
+          showToast(`Test Case Name must start with ${requiredTestCasePrefix} and include additional text.`, 'warning');
+          return;
+        }
+      }
+
+      if (!token) {
+        await showDialog({
+          title: 'Session Expired',
+          message: 'Authentication token not found. Please login again.',
+          confirmText: 'Go to Login',
+          cancelText: '',
+          type: 'warning'
+        });
+        window.location.href = '/login';
+        return;
+      }
+
+      elements.discardRecording.disabled = true;
+      try {
+        await withButtonLoading(elements.confirmSave, 'Saving...', async () => {
+          try {
+            setStatus('Saving recording...');
+
+            // Remove timestamps from steps
+            const stepsWithoutTimestamp = currentActions.map((action) => {
+              const { timestamp, ...rest } = action;
+              return rest;
+            });
+
+            const titleTimestamp = formatTitleTimestamp(new Date());
+            const finalTitle = `${testCaseName}.${titleTimestamp}`;
+
+            // Prepare API payload
+            const apiPayload = {
+              title: finalTitle,
+              description,
+              status: 'draft',
+              customer_id: toTypedId(selectedCustomerOption.id),
+              instance_id: toTypedId(selectedInstanceOption.id),
+              instance_user_id: toTypedId(selectedInstanceUserOption.id),
+              metadata: {
+                createdFrom: 'chrome_extension',
+                userEnteredName: testCaseName,
+                generatedAt: new Date().toISOString()
+              },
+              steps: stepsWithoutTimestamp
+            };
+
+            // Step 1 � Create recording + script
+            const response = await fetch('/api/proxy/api/extension/recordings', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(apiPayload)
+            });
+
+            checkAuthResponse(response);
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+              // Step 2 � Assign business process to the created script (sets mp_id)
+              if (selectedBusinessProcessOption && data.script_id) {
+                try {
+                  const scriptCode = finalTitle.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 120);
+                  const bpResponse = await fetch(`/api/proxy/api/scripts/${data.script_id}/details`, {
+                    method: 'PUT',
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      script_code: scriptCode,
+                      script_name: finalTitle,
+                      process_name: selectedBusinessProcessOption.value,
+                      description: description || finalTitle
+                    })
+                  });
+                  if (bpResponse.ok) {
+                    console.log('[recorder] Business process assigned:', selectedBusinessProcessOption.value);
+                  } else {
+                    const bpErr = await bpResponse.json().catch(() => ({}));
+                    console.error('[recorder] Business process assignment failed:', bpErr.message || bpResponse.status);
+                  }
+                } catch (bpError) {
+                  console.error('[recorder] Business process assignment error:', bpError.message);
+                }
+              }
+              showToast(data.message || 'Recording saved successfully.', 'success');
+              elements.savePanel.style.display = 'none';
+              elements.testCaseName.value = '';
+              elements.description.value = '';
+              await loadRecentScripts(true);
+              setStatus('Recording saved');
+              elements.confirmSave.disabled = false;
+            } else {
+              elements.confirmSave.disabled = false;
+              setStatus('Save failed');
+              showToast(data.message || data.error || 'Failed to save recording.', 'error');
+            }
+          } catch (error) {
+            elements.confirmSave.disabled = false;
+            setStatus('Save failed');
+            showToast(error.message || 'Failed to save recording.', 'error');
+          }
+        });
+      } finally {
+        elements.discardRecording.disabled = false;
+      }
+    });
+

@@ -1,0 +1,88 @@
+{
+  "name": "flowtrace-recorder-desktop",
+  "version": "1.0.0",
+  "description": "FlowTrace Recorder — Windows desktop app",
+  "author": "",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www",
+    "electron": "electron .",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "build:win": "node scripts/build.js --win",
+    "build:mac": "node scripts/build.js --mac"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "dotenv": "^17.3.1",
+    "express": "~4.16.1",
+    "http-errors": "~1.6.3",
+    "jade": "~1.11.0",
+    "morgan": "~1.9.1",
+    "nodemon": "^3.1.14",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.flowtrace.recorder",
+    "productName": "FlowTrace Recorder",
+    "directories": {
+      "output": "dist/electron"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!scripts/**",
+      "!recordings/**",
+      "!temp/**",
+      "!logs/**",
+      "!*.dmg",
+      "!*.zip",
+      "!*.md",
+      "!.env*"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": "../extension/dist",
+        "to": "extension"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/images/flowtrace-icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FlowTrace Recorder"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "public/images/flowtrace-icon.png",
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

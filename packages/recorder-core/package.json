@@ -1,0 +1,20 @@
+{
+  "name": "@flowtrace/recorder-core",
+  "version": "1.0.0",
+  "description": "FlowTrace Pure Observational Capture Engine, Targeting, Correlator, and Component Adapters",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "keywords": ["flowtrace", "recorder", "core", "zero-cdp"],
+  "author": "FlowTrace Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@flowtrace/contracts": "workspace:*",
+    "@flowtrace/recorder-host": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

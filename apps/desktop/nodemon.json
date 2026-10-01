@@ -1,0 +1,16 @@
+{
+  "ignore": [
+    "temp/*",
+    "recordings/*",
+    "public/videos/*",
+    "public/traces/*",
+    "*.log"
+  ],
+  "watch": [
+    "*.js",
+    "routes/**/*.js",
+    "views/**/*.jade",
+    "bin/*"
+  ],
+  "ext": "js,jade,json"
+}

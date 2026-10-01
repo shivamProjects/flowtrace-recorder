@@ -1,0 +1,23 @@
+{
+  "name": "@flowtrace/recorder-host",
+  "version": "1.0.0",
+  "description": "FlowTrace Host SPI & Capability Abstractions for Chrome Extension & Desktop Hosts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": ["flowtrace", "recorder", "host", "spi"],
+  "author": "FlowTrace Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@flowtrace/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.8"
+  }
+}

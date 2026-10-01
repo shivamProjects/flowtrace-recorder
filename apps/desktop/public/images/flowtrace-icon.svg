@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FlowTrace app icon — the square, glyph-only form of the product mark.
+
+  Separate from product_logo.svg because that one is a wide lockup with the
+  wordmark, which is illegible once scaled to a 32px taskbar icon. This drops
+  the words and enlarges the glyph to fill the square.
+
+  Authored at 1024x1024: the size electron-builder wants for a Windows icon,
+  and large enough that every downscale is a clean power-of-two step.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="FlowTrace">
+  <title>FlowTrace</title>
+
+  <!-- Rounded square backdrop, so the mark reads as an app icon rather than a
+       floating glyph on the desktop. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="#2C3E50" />
+
+  <!-- The traced path of steps, in white for contrast on the dark ground. -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="56" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 726 L420 726 L556 590" />
+  </g>
+
+  <!-- Hollow node = the recorded start. Filled = a step that executed. -->
+  <circle cx="248" cy="726" r="60" fill="#2C3E50" stroke="#FFFFFF" stroke-width="48" />
+  <circle cx="420" cy="726" r="46" fill="#FFFFFF" />
+
+  <!-- The verified step: the claim that a pass was independently re-checked. -->
+  <circle cx="646" cy="470" r="150" fill="#27AE60" />
+  <path d="M578 470 L628 520 L716 412" fill="none" stroke="#FFFFFF" stroke-width="52"
+        stroke-linecap="round" stroke-linejoin="round" />
+</svg>

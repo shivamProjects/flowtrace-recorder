@@ -1,23 +1,12 @@
 {
-  "name": "flowtrace-recorder-ext",
+  "name": "flowtrace-recorder-monorepo",
   "version": "1.0.0",
-  "description": "FlowTrace Recorder \u2014 Chrome extension",
   "private": true,
-  "type": "module",
+  "description": "FlowTrace Recorder workspace containing Chrome extension, Desktop Electron wrapper, and contracts",
   "scripts": {
-    "vendor": "node scripts/vendor-injected.mjs",
-    "build": "node build.mjs",
-    "watch": "node build.mjs --watch",
-    "pretest": "node build.mjs",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "package": "node scripts/package-zip.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "^0.25.0",
-    "jsdom": "^29.1.1",
-    "playwright-core": "1.62.1",
-    "vitest": "^2.1.8"
+    "build": "pnpm --filter @flowtrace/contracts build && pnpm --filter flowtrace-recorder-ext build",
+    "test": "pnpm --filter @flowtrace/contracts test && pnpm --filter flowtrace-recorder-ext test",
+    "test:ext": "pnpm --filter flowtrace-recorder-ext test",
+    "build:ext": "pnpm --filter flowtrace-recorder-ext build"
   }
 }
