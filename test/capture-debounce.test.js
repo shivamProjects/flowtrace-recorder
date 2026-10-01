@@ -48,6 +48,7 @@ describe('capture debounce ordering & flush', () => {
     // 2. User immediately clicks button before the 600ms debounce expires
     vi.advanceTimersByTime(100);
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    vi.advanceTimersByTime(250);
 
     // 3. Sent events MUST have fill BEFORE click
     expect(sent.length).toBe(2);

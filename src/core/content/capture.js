@@ -23,6 +23,11 @@ import { isWidgetNode } from './widget.js';
 import { detectRequired } from './required.js';
 import * as bus from './bus.js';
 
+import { resolveInteractiveTarget } from '../capture/targeting/target-resolver.js';
+import { ClickCorrelator } from '../capture/pointer/click-correlator.js';
+import { KeyboardCapture } from '../capture/keyboard/keyboard-capture.js';
+import { FocusState } from '../capture/focus/focus-state.js';
+
 const FILL_DEBOUNCE_MS = 600;
 const CHECKBOX_REEMIT_MS = 500;
 
@@ -30,6 +35,9 @@ let patch = null;
 let ctx = null;
 let listeners = [];
 let fileCapture = null;
+let clickCorrelator = null;
+let keyboardCapture = null;
+let focusState = null;
 const geometryCapture = new GeometryCapture();
 const fillTimers = new Map();
 const lastCheckboxEmit = new WeakMap();
@@ -43,6 +51,22 @@ export function startCapture(activePatch) {
   ctx = buildContext();
 
   safeInvoke(`${patch.id}.start`, patch.capture.start, undefined, ctx);
+
+  clickCorrelator = new ClickCorrelator({
+    emit: (ev) => send(ev),
+    delayMs: 200,
+  });
+
+  keyboardCapture = new KeyboardCapture({
+    emit: (ev) => send(ev),
+    makeEvent,
+    isRecording: () => bus.isRecording(),
+    flushPendingFills: (exclude) => flushPendingFills(exclude),
+  });
+
+  focusState = new FocusState({
+    flushPendingFills: (exclude) => flushPendingFills(exclude),
+  });
 
   // Install detached file upload interceptor
   fileCapture = new FileCapture({
@@ -62,6 +86,11 @@ export function startCapture(activePatch) {
   fileCapture.install();
 
   on(document, 'click', onClick, true);
+  on(document, 'dblclick', onDoubleClick, true);
+  on(document, 'contextmenu', onContextMenu, true);
+  on(document, 'keydown', onKeyDown, true);
+  on(document, 'focusin', onFocusIn, true);
+  on(document, 'focusout', onFocusOut, true);
   on(document, 'input', onInput, true);
   on(document, 'change', onChange, true);
   installNavigationHooks();
@@ -79,6 +108,15 @@ export function stopCapture() {
   }
   for (const off of listeners) off();
   listeners = [];
+  if (clickCorrelator) {
+    clickCorrelator.flush();
+    clickCorrelator = null;
+  }
+  if (focusState) {
+    focusState.reset();
+    focusState = null;
+  }
+  keyboardCapture = null;
   flushPendingFills();
   patch = null;
   ctx = null;
@@ -218,7 +256,7 @@ function buildContext() {
 
 function onClick(e) {
   if (!bus.isRecording()) return;
-  const target = e.target;
+  const target = resolveInteractiveTarget(e) || e.target;
   if (!target || !target.closest) return;
   if (isWidgetNode(target)) return;
 
@@ -232,25 +270,17 @@ function onClick(e) {
   // something more accurate than a generic click — an LOV row selection, a date
   // fill — and the core must not also emit.
   const claimed = safeInvoke(`${patch.id}.onClick`, patch.capture.onClick, false, target, e, ctx);
-  if (claimed === true) return;
+  if (claimed === true) {
+    if (clickCorrelator) clickCorrelator.cancel();
+    return;
+  }
 
   if (isCheckboxLike(target)) {
+    if (clickCorrelator) clickCorrelator.flush();
     emitCheckbox(target, e);
     return;
   }
 
-  // A click that lands on the padding around a checkbox — the <td> or <span>
-  // ADF wraps it in — is not the checkbox, and retargetToInteractive() walks
-  // OUTWARD so it never finds one either. The step was recorded as a generic
-  // click on the cell, which replays as "click that box of pixels" and toggles
-  // nothing. Measured on the captured Create Supplier markup
-  // (checks/pages/checkbox.html): clicking the wrapping <td> emitted
-  // click/TD instead of check/INPUT.
-  //
-  // Exactly ONE checkbox inside means the click was unambiguously meant for it.
-  // A group like Address Purpose (Ordering / Remit to / RFQ or Bidding) sits
-  // three-to-a-cell and nothing here says which was intended, so those keep
-  // falling through to the generic click rather than being guessed at.
   if (target.querySelectorAll) {
     const boxes = target.querySelectorAll('input[type="checkbox"], input[type="radio"]');
     if (boxes.length === 1 && isVisible(boxes[0])) {
@@ -263,7 +293,78 @@ function onClick(e) {
   if (target.tagName === 'SELECT') return;
 
   const interactive = retargetToInteractive(target);
-  send(makeEvent('click', interactive || target));
+  const el = interactive || target;
+  if (clickCorrelator) {
+    clickCorrelator.onClick(el, e, makeEvent);
+  } else {
+    send(makeEvent('click', el));
+  }
+}
+
+function onDoubleClick(e) {
+  if (!bus.isRecording()) return;
+  const target = resolveInteractiveTarget(e) || e.target;
+  if (!target || !target.closest) return;
+  if (isWidgetNode(target)) return;
+
+  flushPendingFills(target);
+
+  const claimed = safeInvoke(`${patch.id}.onDoubleClick`, patch.capture.onDoubleClick, false, target, e, ctx);
+  if (claimed === true) {
+    if (clickCorrelator) clickCorrelator.cancel();
+    return;
+  }
+
+  if (isCheckboxLike(target) || target.tagName === 'SELECT') return;
+
+  const interactive = retargetToInteractive(target);
+  const el = interactive || target;
+  if (clickCorrelator) {
+    clickCorrelator.onDoubleClick(el, e, makeEvent);
+  } else {
+    send(makeEvent('dblclick', el, { clickCount: 2 }));
+  }
+}
+
+function onContextMenu(e) {
+  if (!bus.isRecording()) return;
+  const target = resolveInteractiveTarget(e) || e.target;
+  if (!target || !target.closest) return;
+  if (isWidgetNode(target)) return;
+
+  flushPendingFills(target);
+
+  const claimed = safeInvoke(`${patch.id}.onContextMenu`, patch.capture.onContextMenu, false, target, e, ctx);
+  if (claimed === true) {
+    if (clickCorrelator) clickCorrelator.cancel();
+    return;
+  }
+
+  const interactive = retargetToInteractive(target);
+  const el = interactive || target;
+  if (clickCorrelator) {
+    clickCorrelator.onContextMenu(el, e, makeEvent);
+  } else {
+    send(makeEvent('click', el, { button: 'right', clickCount: 1 }));
+  }
+}
+
+function onKeyDown(e) {
+  if (keyboardCapture) {
+    keyboardCapture.onKeyDown(e);
+  }
+}
+
+function onFocusIn(e) {
+  if (focusState) {
+    focusState.onFocusIn(e);
+  }
+}
+
+function onFocusOut(e) {
+  if (focusState) {
+    focusState.onFocusOut(e);
+  }
 }
 
 function onInput(e) {

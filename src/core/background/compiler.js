@@ -373,7 +373,22 @@ function toStatement(event, previousUrl) {
 
     case 'click': {
       const locator = locatorFor(event);
-      return locator ? `await ${locator}.click();` : null;
+      if (!locator) return null;
+      if (event.button === 'right') {
+        return `await ${locator}.click({ button: 'right' });`;
+      }
+      return `await ${locator}.click();`;
+    }
+
+    case 'dblclick': {
+      const locator = locatorFor(event);
+      return locator ? `await ${locator}.dblclick();` : null;
+    }
+
+    case 'press': {
+      const locator = locatorFor(event);
+      const key = event.key || event.value || 'Tab';
+      return locator ? `await ${locator}.press(${jsString(key)});` : `await page.keyboard.press(${jsString(key)});`;
     }
 
     case 'fill': {
