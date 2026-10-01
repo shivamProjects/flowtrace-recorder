@@ -154,10 +154,10 @@
   }
 
   function showAuthenticated(authenticated, user) {
-    authScreen.classList.toggle('hidden', authenticated);
-    appBody.classList.toggle('hidden', !authenticated);
+    if (authScreen) authScreen.classList.toggle('hidden', authenticated);
+    if (appBody) appBody.classList.toggle('hidden', !authenticated);
     if (btnSignOut) btnSignOut.style.display = authenticated ? 'flex' : 'none';
-    headerMode.textContent = authenticated ? (user ? `Connected (${displayName(user)})` : 'Connected') : 'Signed out';
+    if (headerMode) headerMode.textContent = authenticated ? (user ? `Connected (${displayName(user)})` : 'Connected') : 'Signed out';
     if (authenticated) {
       showMfaStep(false);
       // UserInfo carries fullName and username; email may be absent entirely.
@@ -165,10 +165,10 @@
         authUser.textContent = displayName(user);
         authUser.title = (user && (user.email || user.username)) || '';
       }
-      authPassword.value = '';
-      mfaCode.value = '';
-      authError.textContent = '';
-      mfaError.textContent = '';
+      if (authPassword) authPassword.value = '';
+      if (mfaCode) mfaCode.value = '';
+      if (authError) authError.textContent = '';
+      if (mfaError) mfaError.textContent = '';
     }
   }
 
@@ -179,51 +179,61 @@
 
   /** Swap the password form for the code form, or back. */
   function showMfaStep(pending, mfaType) {
-    authForm.classList.toggle('hidden', pending);
-    mfaForm.classList.toggle('hidden', !pending);
+    if (authForm) authForm.classList.toggle('hidden', pending);
+    if (mfaForm) mfaForm.classList.toggle('hidden', !pending);
     if (pending) {
-      mfaHint.textContent = String(mfaType).toUpperCase() === 'EMAIL'
-        ? 'We emailed you a code.'
-        : 'Enter the code from your authenticator app.';
-      mfaCode.value = '';
-      mfaCode.focus();
+      if (mfaHint) {
+        mfaHint.textContent = String(mfaType).toUpperCase() === 'EMAIL'
+          ? 'We emailed you a code.'
+          : 'Enter the code from your authenticator app.';
+      }
+      if (mfaCode) {
+        mfaCode.value = '';
+        mfaCode.focus();
+      }
     }
   }
 
-  authForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    authError.textContent = '';
-    btnSignIn.disabled = true;
-    btnSignIn.textContent = 'Signing in…';
+  if (authForm) {
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (authError) authError.textContent = '';
+      if (btnSignIn) {
+        btnSignIn.disabled = true;
+        btnSignIn.textContent = 'Signing in…';
+      }
 
-    // The password leaves this scope in the message and is cleared from the
-    // field immediately after; it is never stored, and never written to a log.
-    const resp = await sendBg({
-      action: 'AUTH_SIGN_IN',
-      username: authUsername.value.trim(),
-      password: authPassword.value,
+      // The password leaves this scope in the message and is cleared from the
+      // field immediately after; it is never stored, and never written to a log.
+      const resp = await sendBg({
+        action: 'AUTH_SIGN_IN',
+        username: authUsername ? authUsername.value.trim() : '',
+        password: authPassword ? authPassword.value : '',
+      });
+      if (authPassword) authPassword.value = '';
+
+      if (btnSignIn) {
+        btnSignIn.disabled = false;
+        btnSignIn.textContent = 'Sign in';
+      }
+
+      if (resp && resp.success) {
+        await onSignedIn(resp.user);
+      } else if (resp && resp.mfaRequired) {
+        // Not a failure — the first half of a two-step login. There is no token
+        // yet and nothing works until the code is verified.
+        showMfaStep(true, resp.mfaType);
+      } else {
+        if (authError) authError.textContent = (resp && resp.error) || 'Sign-in failed.';
+      }
     });
-    authPassword.value = '';
-
-    btnSignIn.disabled = false;
-    btnSignIn.textContent = 'Sign in';
-
-    if (resp && resp.success) {
-      await onSignedIn(resp.user);
-    } else if (resp && resp.mfaRequired) {
-      // Not a failure — the first half of a two-step login. There is no token
-      // yet and nothing works until the code is verified.
-      showMfaStep(true, resp.mfaType);
-    } else {
-      authError.textContent = (resp && resp.error) || 'Sign-in failed.';
-    }
-  });
+  }
 
   if (btnQuickDevLogin) {
     btnQuickDevLogin.addEventListener('click', () => {
-      authUsername.value = 'admin@flowtrace.local';
-      authPassword.value = 'password123';
-      authForm.dispatchEvent(new Event('submit', { cancelable: true }));
+      if (authUsername) authUsername.value = 'admin@flowtrace.local';
+      if (authPassword) authPassword.value = 'password123';
+      if (authForm) authForm.dispatchEvent(new Event('submit', { cancelable: true }));
     });
   }
 
@@ -237,41 +247,49 @@
       if (resp && resp.success) {
         await onSignedIn(resp.user);
       } else {
-        authError.textContent = (resp && resp.error) || 'Dev bypass failed.';
+        if (authError) authError.textContent = (resp && resp.error) || 'Dev bypass failed.';
       }
     });
   }
 
-  mfaForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    mfaError.textContent = '';
-    btnVerifyMfa.disabled = true;
-    btnVerifyMfa.textContent = 'Verifying…';
+  if (mfaForm) {
+    mfaForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (mfaError) mfaError.textContent = '';
+      if (btnVerifyMfa) {
+        btnVerifyMfa.disabled = true;
+        btnVerifyMfa.textContent = 'Verifying…';
+      }
 
-    // Only the code. The MFA token it is checked against stays in the worker.
-    const resp = await sendBg({ action: 'AUTH_VERIFY_MFA', code: mfaCode.value });
-    mfaCode.value = '';
+      // Only the code. The MFA token it is checked against stays in the worker.
+      const resp = await sendBg({ action: 'AUTH_VERIFY_MFA', code: mfaCode ? mfaCode.value : '' });
+      if (mfaCode) mfaCode.value = '';
 
-    btnVerifyMfa.disabled = false;
-    btnVerifyMfa.textContent = 'Verify';
+      if (btnVerifyMfa) {
+        btnVerifyMfa.disabled = false;
+        btnVerifyMfa.textContent = 'Verify';
+      }
 
-    if (resp && resp.success) {
-      await onSignedIn(resp.user);
-    } else if (resp && resp.mfaRequired) {
-      mfaError.textContent = resp.error || 'That code was not accepted.';
-      mfaCode.focus();
-    } else {
-      // The attempt is over — back to the password form.
+      if (resp && resp.success) {
+        await onSignedIn(resp.user);
+      } else if (resp && resp.mfaRequired) {
+        if (mfaError) mfaError.textContent = resp.error || 'That code was not accepted.';
+        if (mfaCode) mfaCode.focus();
+      } else {
+        // The attempt is over — back to the password form.
+        showMfaStep(false);
+        if (authError) authError.textContent = (resp && resp.error) || 'Sign-in failed.';
+      }
+    });
+  }
+
+  if (btnMfaCancel) {
+    btnMfaCancel.addEventListener('click', async () => {
+      await sendBg({ action: 'AUTH_SIGN_OUT' });
       showMfaStep(false);
-      authError.textContent = (resp && resp.error) || 'Sign-in failed.';
-    }
-  });
-
-  btnMfaCancel.addEventListener('click', async () => {
-    await sendBg({ action: 'AUTH_SIGN_OUT' });
-    showMfaStep(false);
-    authError.textContent = '';
-  });
+      if (authError) authError.textContent = '';
+    });
+  }
 
   async function onSignedIn(user) {
     showAuthenticated(true, user);
@@ -279,12 +297,14 @@
     showToast('✓ Signed in');
   }
 
-  btnSignOut.addEventListener('click', async () => {
-    stopPolling();
-    await sendBg({ action: 'AUTH_SIGN_OUT' });
-    showAuthenticated(false, null);
-    showToast('Signed out');
-  });
+  if (btnSignOut) {
+    btnSignOut.addEventListener('click', async () => {
+      stopPolling();
+      await sendBg({ action: 'AUTH_SIGN_OUT' });
+      showAuthenticated(false, null);
+      showToast('Signed out');
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Load available patches from background and rebuild the dropdown
@@ -372,26 +392,28 @@
     if (!known) btnStart.disabled = true;
   }
 
-  envSelect.addEventListener('change', async () => {
-    const id = envSelect.value;
-    const name = envSelect.options[envSelect.selectedIndex]?.textContent || id;
+  if (envSelect) {
+    envSelect.addEventListener('change', async () => {
+      const id = envSelect.value;
+      const name = envSelect.options[envSelect.selectedIndex]?.textContent || id;
 
-    const resp = await sendBg({
-      action: 'SET_ENVIRONMENT',
-      environment: id ? { id, name } : null,
+      const resp = await sendBg({
+        action: 'SET_ENVIRONMENT',
+        environment: id ? { id, name } : null,
+      });
+
+      if (resp && !resp.success) {
+        showToast(`⚠ ${resp.error || 'Could not set the environment.'}`);
+        return;
+      }
+
+      setEnvironmentKnown(!!id, resp && resp.environment);
+      if (id) {
+        if (btnStart) btnStart.disabled = false;
+        showToast(`Environment: ${name}`);
+      }
     });
-
-    if (resp && !resp.success) {
-      showToast(`⚠ ${resp.error || 'Could not set the environment.'}`);
-      return;
-    }
-
-    setEnvironmentKnown(!!id, resp && resp.environment);
-    if (id) {
-      btnStart.disabled = false;
-      showToast(`Environment: ${name}`);
-    }
-  });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Apply session state to UI
@@ -425,76 +447,72 @@
   // states: 'idle' | 'recording' | 'paused' | 'stopped'
   // ─────────────────────────────────────────────────────────────────────────
   function setUIState(state) {
-    statusPill.className = `status-pill ${state}`;
+    if (statusPill) statusPill.className = `status-pill ${state}`;
 
     switch (state) {
       case 'idle':
-        statusText.textContent  = 'Idle';
-        headerMode.textContent  = 'Ready';
-        logoDot.className       = 'logo-dot';
-        btnStart.disabled       = !haveEnvironment;
-        btnPause.disabled       = true;
-        btnPause.textContent    = 'Pause';
-        btnStop.disabled        = true;
-        btnClear.disabled       = false;
-        btnCopy.disabled        = true;
-        btnSave.disabled        = true;
-        btnExportJson.disabled  = true;
-        btnExportJs.disabled    = true;
-        patchSelect.disabled    = false;
-        envSelect.disabled      = false;
+        if (statusText) statusText.textContent  = 'Idle';
+        if (headerMode) headerMode.textContent  = 'Ready';
+        if (logoDot) logoDot.className       = 'logo-dot';
+        if (btnStart) btnStart.disabled       = !haveEnvironment;
+        if (btnPause) { btnPause.disabled    = true; btnPause.textContent = 'Pause'; }
+        if (btnStop) btnStop.disabled        = true;
+        if (btnClear) btnClear.disabled       = false;
+        if (btnCopy) btnCopy.disabled        = true;
+        if (btnSave) btnSave.disabled        = true;
+        if (btnExportJson) btnExportJson.disabled  = true;
+        if (btnExportJs) btnExportJs.disabled    = true;
+        if (patchSelect) patchSelect.disabled    = false;
+        if (envSelect) envSelect.disabled      = false;
         break;
 
       case 'recording':
-        statusText.textContent  = 'Recording';
-        headerMode.textContent  = 'Recording…';
-        logoDot.className       = 'logo-dot recording';
-        btnStart.disabled       = true;
-        btnPause.disabled       = false;
-        btnPause.textContent    = 'Pause';
-        btnStop.disabled        = false;
-        btnClear.disabled       = true;
-        btnCopy.disabled        = true;
-        btnSave.disabled        = true;
-        btnExportJson.disabled  = true;
-        btnExportJs.disabled    = true;
-        patchSelect.disabled    = true;
-        envSelect.disabled      = true;
+        if (statusText) statusText.textContent  = 'Recording';
+        if (headerMode) headerMode.textContent  = 'Recording…';
+        if (logoDot) logoDot.className       = 'logo-dot recording';
+        if (btnStart) btnStart.disabled       = true;
+        if (btnPause) { btnPause.disabled    = false; btnPause.textContent = 'Pause'; }
+        if (btnStop) btnStop.disabled        = false;
+        if (btnClear) btnClear.disabled       = true;
+        if (btnCopy) btnCopy.disabled        = true;
+        if (btnSave) btnSave.disabled        = true;
+        if (btnExportJson) btnExportJson.disabled  = true;
+        if (btnExportJs) btnExportJs.disabled    = true;
+        if (patchSelect) patchSelect.disabled    = true;
+        if (envSelect) envSelect.disabled      = true;
         break;
 
       case 'paused':
-        statusText.textContent  = 'Paused';
-        headerMode.textContent  = 'Paused';
-        logoDot.className       = 'logo-dot';
-        btnStart.disabled       = true;
-        btnPause.disabled       = false;
-        btnPause.textContent    = 'Resume';
-        btnStop.disabled        = false;
-        btnClear.disabled       = false;
-        btnCopy.disabled        = false;
-        btnSave.disabled        = true;
-        btnExportJson.disabled  = false;
-        btnExportJs.disabled    = false;
-        patchSelect.disabled    = true;
-        envSelect.disabled      = true;
+        if (statusText) statusText.textContent  = 'Paused';
+        if (headerMode) headerMode.textContent  = 'Paused';
+        if (logoDot) logoDot.className       = 'logo-dot';
+        if (btnStart) btnStart.disabled       = true;
+        if (btnPause) { btnPause.disabled    = false; btnPause.textContent = 'Resume'; }
+        if (btnStop) btnStop.disabled        = false;
+        if (btnClear) btnClear.disabled       = false;
+        if (btnCopy) btnCopy.disabled        = false;
+        if (btnSave) btnSave.disabled        = true;
+        if (btnExportJson) btnExportJson.disabled  = false;
+        if (btnExportJs) btnExportJs.disabled    = false;
+        if (patchSelect) patchSelect.disabled    = true;
+        if (envSelect) envSelect.disabled      = true;
         break;
 
       case 'stopped':
-        statusText.textContent  = 'Stopped';
-        headerMode.textContent  = 'Script Ready';
-        logoDot.className       = 'logo-dot';
-        statusPill.className    = 'status-pill stopped';
-        btnStart.disabled       = !haveEnvironment;
-        btnPause.disabled       = true;
-        btnPause.textContent    = 'Pause';
-        btnStop.disabled        = true;
-        btnClear.disabled       = false;
-        btnCopy.disabled        = false;
-        btnSave.disabled        = false;
-        btnExportJson.disabled  = false;
-        btnExportJs.disabled    = false;
-        patchSelect.disabled    = false;
-        envSelect.disabled      = false;
+        if (statusText) statusText.textContent  = 'Stopped';
+        if (headerMode) headerMode.textContent  = 'Script Ready';
+        if (logoDot) logoDot.className       = 'logo-dot';
+        if (statusPill) statusPill.className    = 'status-pill stopped';
+        if (btnStart) btnStart.disabled       = !haveEnvironment;
+        if (btnPause) { btnPause.disabled    = true; btnPause.textContent = 'Pause'; }
+        if (btnStop) btnStop.disabled        = true;
+        if (btnClear) btnClear.disabled       = false;
+        if (btnCopy) btnCopy.disabled        = false;
+        if (btnSave) btnSave.disabled        = false;
+        if (btnExportJson) btnExportJson.disabled  = false;
+        if (btnExportJs) btnExportJs.disabled    = false;
+        if (patchSelect) patchSelect.disabled    = false;
+        if (envSelect) envSelect.disabled      = false;
         break;
     }
   }
@@ -622,176 +640,192 @@
   // ─────────────────────────────────────────────────────────────────────────
   // Patch selector change handler
   // ─────────────────────────────────────────────────────────────────────────
-  patchSelect.addEventListener('change', async () => {
-    const patchId = patchSelect.value;
-    updatePatchBadge(patchId);
+  if (patchSelect) {
+    patchSelect.addEventListener('change', async () => {
+      const patchId = patchSelect.value;
+      updatePatchBadge(patchId);
 
-    // Persist preference so it survives popup close
-    await chrome.storage.local.set({ preferredPatchId: patchId });
+      // Persist preference so it survives popup close
+      await chrome.storage.local.set({ preferredPatchId: patchId });
 
-    // Notify background
-    const resp = await sendBg({ action: 'SET_PATCH', patchId });
-    if (resp && !resp.success) {
-      showToast(`⚠ ${resp.error || 'Could not set the application.'}`);
-      return;
-    }
-    showToast(`Application: ${PATCH_NAMES[patchId] || patchId}`);
-  });
+      // Notify background
+      const resp = await sendBg({ action: 'SET_PATCH', patchId });
+      if (resp && !resp.success) {
+        showToast(`⚠ ${resp.error || 'Could not set the application.'}`);
+        return;
+      }
+      showToast(`Application: ${PATCH_NAMES[patchId] || patchId}`);
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Start recording
   // ─────────────────────────────────────────────────────────────────────────
-  btnStart.addEventListener('click', async () => {
-    btnStart.disabled = true;
+  if (btnStart) {
+    btnStart.addEventListener('click', async () => {
+      btnStart.disabled = true;
 
-    const tab = await getActiveTab();
-    if (!tab || !tab.id) {
-      showToast('⚠ Could not detect an active tab.');
-      btnStart.disabled = false;
-      return;
-    }
+      const tab = await getActiveTab();
+      if (!tab || !tab.id) {
+        showToast('⚠ Could not detect an active tab.');
+        btnStart.disabled = false;
+        return;
+      }
 
-    if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('about:')) {
-      showToast('⚠ Cannot record on browser internal pages.');
-      btnStart.disabled = false;
-      return;
-    }
+      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('about:')) {
+        showToast('⚠ Cannot record on browser internal pages.');
+        btnStart.disabled = false;
+        return;
+      }
 
-    // Inject content script (graceful if already present)
-    try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
-    } catch (e) {
-      console.warn('[popup] Script inject warning:', e.message);
-    }
+      // Inject content script (graceful if already present)
+      try {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+      } catch (e) {
+        console.warn('[popup] Script inject warning:', e.message);
+      }
 
-    const patchId = patchSelect.value;
+      const patchId = patchSelect ? patchSelect.value : 'generic';
 
-    const resp = await sendBg({
-      action: 'START_RECORDING',
-      tabId:  tab.id,
-      tabUrl: tab.url,
-      patchId,
+      const resp = await sendBg({
+        action: 'START_RECORDING',
+        tabId:  tab.id,
+        tabUrl: tab.url,
+        patchId,
+      });
+
+      if (resp && resp.success) {
+        setUIState('recording');
+        updatePatchBadge(patchId);
+        if (codeOutput) codeOutput.value = '';
+        if (eventCount) eventCount.textContent = '0';
+        startPolling();
+        showToast(`🔴 Recording → ${resp.environment ? resp.environment.name : 'environment'}`);
+      } else if (resp && resp.unauthenticated) {
+        // The worker refused. It is the only opinion that counts, so the UI
+        // follows it rather than the other way round.
+        showAuthenticated(false, null);
+        showToast(`⚠ ${resp.error}`);
+      } else if (resp && resp.environmentRequired) {
+        // The worker and the popup disagreed about the environment — the worker
+        // wins, and the list is reloaded so the UI stops claiming otherwise.
+        setEnvironmentKnown(false, null);
+        await loadEnvironments();
+        showToast(`⚠ ${resp.error}`);
+      } else {
+        showToast(`⚠ ${resp?.error || 'Failed to start recording.'}`);
+        btnStart.disabled = false;
+      }
     });
-
-    if (resp && resp.success) {
-      setUIState('recording');
-      updatePatchBadge(patchId);
-      codeOutput.value = '';
-      if (eventCount) eventCount.textContent = '0';
-      startPolling();
-      showToast(`🔴 Recording → ${resp.environment ? resp.environment.name : 'environment'}`);
-    } else if (resp && resp.unauthenticated) {
-      // The worker refused. It is the only opinion that counts, so the UI
-      // follows it rather than the other way round.
-      showAuthenticated(false, null);
-      showToast(`⚠ ${resp.error}`);
-    } else if (resp && resp.environmentRequired) {
-      // The worker and the popup disagreed about the environment — the worker
-      // wins, and the list is reloaded so the UI stops claiming otherwise.
-      setEnvironmentKnown(false, null);
-      await loadEnvironments();
-      showToast(`⚠ ${resp.error}`);
-    } else {
-      showToast(`⚠ ${resp?.error || 'Failed to start recording.'}`);
-      btnStart.disabled = false;
-    }
-  });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Pause / Resume recording
   // ─────────────────────────────────────────────────────────────────────────
-  btnPause.addEventListener('click', async () => {
-    const isCurrentlyPaused = statusPill.classList.contains('paused');
-    const action = isCurrentlyPaused ? 'RESUME_RECORDING' : 'PAUSE_RECORDING';
-    const resp = await sendBg({ action });
+  if (btnPause) {
+    btnPause.addEventListener('click', async () => {
+      const isCurrentlyPaused = statusPill && statusPill.classList.contains('paused');
+      const action = isCurrentlyPaused ? 'RESUME_RECORDING' : 'PAUSE_RECORDING';
+      const resp = await sendBg({ action });
 
-    if (resp && resp.success) {
-      if (resp.isPaused) {
-        setUIState('paused');
-        showToast('⏸ Recording paused');
+      if (resp && resp.success) {
+        if (resp.isPaused) {
+          setUIState('paused');
+          showToast('⏸ Recording paused');
+        } else {
+          setUIState('recording');
+          showToast('▶ Recording resumed');
+        }
       } else {
-        setUIState('recording');
-        showToast('▶ Recording resumed');
+        showToast(`⚠ ${(resp && resp.error) || 'Failed to toggle pause.'}`);
       }
-    } else {
-      showToast(`⚠ ${(resp && resp.error) || 'Failed to toggle pause.'}`);
-    }
-  });
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Stop recording
   // ─────────────────────────────────────────────────────────────────────────
-  btnStop.addEventListener('click', async () => {
-    btnStop.disabled = true;
-    stopPolling();
+  if (btnStop) {
+    btnStop.addEventListener('click', async () => {
+      btnStop.disabled = true;
+      stopPolling();
 
-    const resp = await sendBg({ action: 'STOP_RECORDING' });
+      const resp = await sendBg({ action: 'STOP_RECORDING' });
 
-    if (resp && resp.success) {
-      if (eventCount) eventCount.textContent = resp.eventCount || 0;
-      codeOutput.value       = resp.generatedCode || '// No events recorded.';
-      updatePatchBadge(resp.patchId || patchSelect.value);
-      setUIState('stopped');
-      switchTab('tab-code');
+      if (resp && resp.success) {
+        if (eventCount) eventCount.textContent = resp.eventCount || 0;
+        if (codeOutput) codeOutput.value       = resp.generatedCode || '// No events recorded.';
+        updatePatchBadge(resp.patchId || (patchSelect ? patchSelect.value : 'generic'));
+        setUIState('stopped');
+        switchTab('tab-code');
 
-      const processedCount = resp.processedCount || resp.eventCount || 0;
-      showToast(`✓ Done — ${processedCount} step(s) · ${PATCH_NAMES[resp.patchId] || resp.patchId || 'Generic'}`);
-    } else {
-      showToast(`⚠ ${resp?.error || 'Failed to stop recording.'}`);
-      btnStop.disabled = false;
-    }
-  });
+        const processedCount = resp.processedCount || resp.eventCount || 0;
+        showToast(`✓ Done — ${processedCount} step(s) · ${PATCH_NAMES[resp.patchId] || resp.patchId || 'Generic'}`);
+      } else {
+        showToast(`⚠ ${resp?.error || 'Failed to stop recording.'}`);
+        btnStop.disabled = false;
+      }
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Clear recording
   // ─────────────────────────────────────────────────────────────────────────
-  btnClear.addEventListener('click', async () => {
-    stopPolling();
-    const resp = await sendBg({ action: 'CLEAR_RECORDING' });
-    codeOutput.value = '';
-    if (eventCount) eventCount.textContent = '0';
-    renderTimeline([]);
-    // Preserve the patch selection after clear
-    if (resp && resp.patchId) {
-      const opt = patchSelect.querySelector(`option[value="${resp.patchId}"]`);
-      if (opt) patchSelect.value = resp.patchId;
-      updatePatchBadge(resp.patchId);
-    }
-    setUIState('idle');
-    showToast('Session cleared');
-  });
+  if (btnClear) {
+    btnClear.addEventListener('click', async () => {
+      stopPolling();
+      const resp = await sendBg({ action: 'CLEAR_RECORDING' });
+      if (codeOutput) codeOutput.value = '';
+      if (eventCount) eventCount.textContent = '0';
+      renderTimeline([]);
+      // Preserve the patch selection after clear
+      if (resp && resp.patchId) {
+        if (patchSelect) {
+          const opt = patchSelect.querySelector(`option[value="${resp.patchId}"]`);
+          if (opt) patchSelect.value = resp.patchId;
+        }
+        updatePatchBadge(resp.patchId);
+      }
+      setUIState('idle');
+      showToast('Session cleared');
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Export actions.json (for direct Replayer execution)
   // ─────────────────────────────────────────────────────────────────────────
-  btnExportJson.addEventListener('click', async () => {
-    const statusResp = await sendBg({ action: 'GET_STATUS' });
-    const s = (statusResp && statusResp.session) || {};
-    const actionsData = s.actions || s.events || [];
+  if (btnExportJson) {
+    btnExportJson.addEventListener('click', async () => {
+      const statusResp = await sendBg({ action: 'GET_STATUS' });
+      const s = (statusResp && statusResp.session) || {};
+      const actionsData = s.actions || s.events || [];
 
-    if (!actionsData || actionsData.length === 0) {
-      showToast('⚠ No actions to export.');
-      return;
-    }
+      if (!actionsData || actionsData.length === 0) {
+        showToast('⚠ No actions to export.');
+        return;
+      }
 
-    const payload = JSON.stringify(actionsData, null, 2);
-    downloadFile(payload, 'flowtrace-actions.json', 'application/json');
-    showToast('✓ actions.json downloaded');
-  });
+      const payload = JSON.stringify(actionsData, null, 2);
+      downloadFile(payload, 'flowtrace-actions.json', 'application/json');
+      showToast('✓ actions.json downloaded');
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Export Playwright Spec Script
   // ─────────────────────────────────────────────────────────────────────────
-  btnExportJs.addEventListener('click', () => {
-    const code = codeOutput.value.trim();
-    if (!code || (code.startsWith('//') && code.split('\n').length < 4)) {
-      showToast('⚠ No script to export.');
-      return;
-    }
+  if (btnExportJs) {
+    btnExportJs.addEventListener('click', () => {
+      const code = codeOutput ? codeOutput.value.trim() : '';
+      if (!code || (code.startsWith('//') && code.split('\n').length < 4)) {
+        showToast('⚠ No script to export.');
+        return;
+      }
 
-    downloadFile(code, 'flowtrace-recording.spec.js', 'text/javascript');
-    showToast('✓ Playwright script downloaded');
-  });
+      downloadFile(code, 'flowtrace-recording.spec.js', 'text/javascript');
+      showToast('✓ Playwright script downloaded');
+    });
+  }
 
   function downloadFile(content, filename, mimeType) {
     const blob = new Blob([content], { type: mimeType });
@@ -808,81 +842,86 @@
   // ─────────────────────────────────────────────────────────────────────────
   // Copy code to clipboard
   // ─────────────────────────────────────────────────────────────────────────
-  btnCopy.addEventListener('click', async () => {
-    const code = codeOutput.value.trim();
-    if (!code || (code.startsWith('//') && code.split('\n').length < 4)) {
-      showToast('⚠ Nothing to copy yet.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(code);
-      showToast('✓ Copied to clipboard!');
-    } catch (_) {
-      codeOutput.select();
-      document.execCommand('copy');
-      showToast('✓ Copied!');
-    }
-  });
+  if (btnCopy) {
+    btnCopy.addEventListener('click', async () => {
+      const code = codeOutput ? codeOutput.value.trim() : '';
+      if (!code || (code.startsWith('//') && code.split('\n').length < 4)) {
+        showToast('⚠ Nothing to copy yet.');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast('✓ Copied to clipboard!');
+      } catch (_) {
+        if (codeOutput) {
+          codeOutput.select();
+          document.execCommand('copy');
+          showToast('✓ Copied!');
+        }
+      }
+    });
+  }
 
   // ── Settings panel toggle ────────────────────────────────────────────────
-  btnSettings.addEventListener('click', () => {
-    settingsPanel.classList.toggle('hidden');
-  });
+  if (btnSettings) {
+    btnSettings.addEventListener('click', () => {
+      if (settingsPanel) settingsPanel.classList.toggle('hidden');
+    });
+  }
 
   // ── Save Settings ────────────────────────────────────────────────────────
-  btnSaveSettings.addEventListener('click', async () => {
-    const resp = await sendBg({ action: 'SET_SETTINGS', apiBase: settingApiBase.value.trim() });
-    if (resp && resp.apiBase) settingApiBase.value = resp.apiBase;
-    showToast('✓ Configuration saved!');
-    settingsPanel.classList.add('hidden');
-    // A different server has different environments, and possibly a different
-    // account behind the stored token.
-    await refreshAuth();
-    await loadEnvironments();
-  });
+  if (btnSaveSettings) {
+    btnSaveSettings.addEventListener('click', async () => {
+      const apiBase = settingApiBase ? settingApiBase.value.trim() : '';
+      const resp = await sendBg({ action: 'SET_SETTINGS', apiBase });
+      if (resp && resp.apiBase && settingApiBase) settingApiBase.value = resp.apiBase;
+      showToast('✓ Configuration saved!');
+      if (settingsPanel) settingsPanel.classList.add('hidden');
+      await refreshAuth();
+      await loadEnvironments();
+    });
+  }
 
   // ── Save the recording to the platform ───────────────────────────────────
-  //
-  // The worker performs the upload; it holds the token, the environment and the
-  // compiled recording already. The popup contributes a name and reports the
-  // outcome.
-  btnSave.addEventListener('click', async () => {
-    const statusResp = await sendBg({ action: 'GET_STATUS' });
-    const currentSession = (statusResp && statusResp.session) || {};
+  if (btnSave) {
+    btnSave.addEventListener('click', async () => {
+      const statusResp = await sendBg({ action: 'GET_STATUS' });
+      const currentSession = (statusResp && statusResp.session) || {};
 
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const stamp =
-      `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
-      `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const stamp =
+        `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
+        `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 
-    btnSave.disabled = true;
-    const origText = btnSave.innerHTML;
-    btnSave.textContent = 'Saving...';
+      btnSave.disabled = true;
+      const origText = btnSave.innerHTML;
+      btnSave.textContent = 'Saving...';
 
-    const customNameInput = document.getElementById('sync-script-name');
-    const customDescInput = document.getElementById('sync-script-desc');
-    const scriptName = (customNameInput && customNameInput.value.trim()) || `Script_${currentSession.patchId || patchSelect.value}_${stamp}`;
-    const scriptDesc = (customDescInput && customDescInput.value.trim()) || `Recorded from the Chrome extension on ${now.toLocaleString()}`;
+      const customNameInput = document.getElementById('sync-script-name');
+      const customDescInput = document.getElementById('sync-script-desc');
+      const scriptName = (customNameInput && customNameInput.value.trim()) || `Script_${currentSession.patchId || (patchSelect ? patchSelect.value : 'generic')}_${stamp}`;
+      const scriptDesc = (customDescInput && customDescInput.value.trim()) || `Recorded from the Chrome extension on ${now.toLocaleString()}`;
 
-    const resp = await sendBg({
-      action: 'UPLOAD_RECORDING',
-      name: scriptName,
-      description: scriptDesc,
+      const resp = await sendBg({
+        action: 'UPLOAD_RECORDING',
+        name: scriptName,
+        description: scriptDesc,
+      });
+
+      btnSave.innerHTML = origText;
+      btnSave.disabled = false;
+
+      if (resp && resp.success) {
+        showToast('✓ Saved to the platform');
+      } else if (resp && resp.unauthenticated) {
+        showAuthenticated(false, null);
+        showToast(`⚠ ${resp.error}`);
+      } else {
+        showToast(`⚠ ${(resp && resp.error) || 'Save failed.'}`);
+      }
     });
-
-    btnSave.innerHTML = origText;
-    btnSave.disabled = false;
-
-    if (resp && resp.success) {
-      showToast('✓ Saved to the platform');
-    } else if (resp && resp.unauthenticated) {
-      showAuthenticated(false, null);
-      showToast(`⚠ ${resp.error}`);
-    } else {
-      showToast(`⚠ ${(resp && resp.error) || 'Save failed.'}`);
-    }
-  });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Live event-count polling while recording

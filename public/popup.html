@@ -602,6 +602,7 @@
     <div class="header-title-wrap">
       <span class="header-title">FlowTrace Recorder</span>
       <span class="header-subtitle" id="header-mode">Studio v1.0 · Connected</span>
+      <span class="header-subtitle" id="auth-user" style="display:none;"></span>
     </div>
     <div class="header-actions">
       <button id="btn-settings" class="btn-icon" title="Settings">
@@ -646,6 +647,7 @@
         <label for="auth-password" class="form-label">Password</label>
         <input type="password" id="auth-password" class="form-input" autocomplete="current-password" placeholder="••••••••" required />
       </div>
+      <div id="auth-error" class="auth-error"></div>
       <button type="submit" id="btn-sign-in" class="btn btn-primary">Sign In</button>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button type="button" id="btn-quick-dev-login" class="btn" style="flex:1; font-size:11px; padding:7px 4px; background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);">⚡ Dev Login</button>
@@ -755,7 +757,7 @@
       <div class="timeline-wrap">
         <div class="timeline-header">
           <span>Captured Interactions</span>
-          <span style="font-size:10.5px; color:var(--text-3);">Live Stream</span>
+          <span id="timeline-hint" style="font-size:10.5px; color:var(--text-3);">Live Stream</span>
         </div>
         <div class="step-list" id="step-list">
           <div style="padding: 16px; text-align: center; color: var(--text-3); font-style: italic; font-size: 11px;">
