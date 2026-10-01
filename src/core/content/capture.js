@@ -273,7 +273,7 @@ function onInput(e) {
   const tag = target.tagName;
   if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
   const type = (target.getAttribute('type') || '').toLowerCase();
-  if (type === 'checkbox' || type === 'radio') return;
+  if (type === 'checkbox' || type === 'radio' || type === 'file') return;
 
   safeInvoke(`${patch.id}.onInput`, patch.capture.onInput, undefined, target, e, ctx);
 
@@ -319,6 +319,22 @@ function onChange(e) {
     send(makeEvent('select', target, {
       value: option.value,
       meta: { optionLabel: (option.text || '').trim(), optionValue: option.value },
+    }));
+    return;
+  }
+
+  if (target.tagName === 'INPUT' && (target.getAttribute('type') || '').toLowerCase() === 'file') {
+    const fileList = target.files;
+    const files = [];
+    if (fileList) {
+      for (let i = 0; i < fileList.length; i++) {
+        files.push(fileList[i].name);
+      }
+    }
+    const fileName = files[0] || (target.value ? target.value.split(/[\\/]/).pop() : 'upload.dat');
+    send(makeEvent('setInputFiles', target, {
+      files: files.length > 0 ? files : [fileName],
+      value: files.join(', ') || fileName,
     }));
     return;
   }

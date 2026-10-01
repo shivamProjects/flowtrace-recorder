@@ -400,6 +400,19 @@ function toStatement(event, previousUrl) {
       return locator ? `await ${locator}.check();` : null;
     }
 
+    case 'setInputFiles':
+    case 'upload': {
+      const locator = locatorFor(event);
+      if (!locator) return null;
+      const rawFiles = event.files || (event.value ? [event.value] : []);
+      const files = (Array.isArray(rawFiles) ? rawFiles : [rawFiles])
+        .map((f) => (typeof f === 'object' && f !== null && 'name' in f ? f.name : String(f)));
+      if (files.length > 1) {
+        return `await ${locator}.setInputFiles([${files.map(f => jsString(f)).join(', ')}]);`;
+      }
+      return `await ${locator}.setInputFiles(${jsString(files[0] || '')});`;
+    }
+
     default:
       // Patch-private bookkeeping events (meta_*) reach here when postProcess
       // has consumed them. Emitting nothing is the correct outcome.
