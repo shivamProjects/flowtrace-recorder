@@ -15,7 +15,7 @@
 
 const STORAGE_KEY = 'auth';
 
-let state = { token: null, user: null, expiresAt: null };
+let state = { token: null, user: null, expiresAt: null, authMode: 'platform' };
 let loaded = false;
 
 export async function ensureLoaded() {
@@ -25,7 +25,12 @@ export async function ensureLoaded() {
     const stored = await chrome.storage.local.get(STORAGE_KEY);
     const saved = stored[STORAGE_KEY];
     if (saved && saved.token) {
-      state = { token: saved.token, user: saved.user || null, expiresAt: saved.expiresAt ?? null };
+      state = {
+        token: saved.token,
+        user: saved.user || null,
+        expiresAt: saved.expiresAt ?? null,
+        authMode: saved.authMode || 'platform',
+      };
     }
   } catch (err) {
     // Storage unavailable is indistinguishable from signed out, and signed out
@@ -34,8 +39,8 @@ export async function ensureLoaded() {
   }
 }
 
-export async function save(token, user) {
-  state = { token, user: user || null, expiresAt: expiryOf(token) };
+export async function save(token, user, authMode = 'platform') {
+  state = { token, user: user || null, expiresAt: expiryOf(token), authMode };
   loaded = true;
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
 }
@@ -48,9 +53,13 @@ export async function updateUser(user) {
 }
 
 export async function clear() {
-  state = { token: null, user: null, expiresAt: null };
+  state = { token: null, user: null, expiresAt: null, authMode: 'platform' };
   loaded = true;
   await chrome.storage.local.remove(STORAGE_KEY);
+}
+
+export function getAuthMode() {
+  return state.authMode || 'platform';
 }
 
 /**

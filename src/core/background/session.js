@@ -95,6 +95,7 @@ export function initLifecycleObservers(injectFn, broadcastFn) {
       injectContentScript: (tabId) => savedInjectFn ? savedInjectFn(tabId) : Promise.resolve(),
       broadcast: (tabId, eventName, detail) => savedBroadcastFn ? savedBroadcastFn(tabId, eventName, detail) : Promise.resolve(),
       getPatchId: () => session.patchId,
+      isPaused: () => session.isPaused,
     });
   }
   return lifecycleObservers;
@@ -124,6 +125,10 @@ export async function ensureLoaded() {
       }
       if (session.surfaceState) {
         surfaceRegistry.fromJSON(session.surfaceState);
+      }
+      // Rehydrate EffectCorrelator with recently persisted events so downstream effects correlate across worker restarts
+      if (session.events && session.events.length > 0) {
+        effectCorrelator.restoreRecentActions(session.events);
       }
     }
     if (!session.isRecording && stored[PREFERENCE_KEY]) {

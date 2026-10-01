@@ -127,6 +127,23 @@ export class EffectCorrelator {
     this._pendingEffects = this._pendingEffects.filter((e) => (now - e.timestamp) <= this._maxGlobalWindowMs);
   }
 
+  /**
+   * Rehydrate recent action candidates upon MV3 service worker resurrection.
+   * @param {Array<Object>} actions Persisted session events
+   */
+  restoreRecentActions(actions = []) {
+    if (!Array.isArray(actions)) return;
+    const now = Date.now();
+    this.clear();
+    for (const action of actions) {
+      if (!action || typeof action !== 'object') continue;
+      const ts = action.timestamp || now;
+      if ((now - ts) <= this._maxGlobalWindowMs) {
+        this._recentActions.push({ action, timestamp: ts });
+      }
+    }
+  }
+
   clear() {
     this._recentActions = [];
     this._pendingEffects = [];
@@ -138,8 +155,11 @@ export class LifecycleObservers {
    * @param {Object} options
    * @param {SurfaceRegistry} options.surfaceRegistry
    * @param {EffectCorrelator} options.correlator
-   * @param {Function} options.onEffectCaptured
-   * @param {Function} options.injectContentScript
+   * @param {Function} [options.onEffectCaptured]
+   * @param {Function} [options.injectContentScript]
+   * @param {Function} [options.broadcast]
+   * @param {Function} [options.getPatchId]
+   * @param {Function} [options.isPaused]
    */
   constructor(options) {
     this.surfaceRegistry = options.surfaceRegistry;
@@ -148,6 +168,7 @@ export class LifecycleObservers {
     this.injectContentScript = options.injectContentScript || (async () => {});
     this.broadcast = options.broadcast || (async () => {});
     this.getPatchId = options.getPatchId || (() => null);
+    this.isPaused = options.isPaused || (() => false);
 
     this._listeners = [];
     this._active = false;
@@ -158,7 +179,7 @@ export class LifecycleObservers {
    * @returns {boolean}
    */
   isActive() {
-    return this._active;
+    return this._active && !this.isPaused();
   }
 
   /**

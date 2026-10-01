@@ -7,10 +7,11 @@
  */
 
 import * as patches from '../../patches/index.js';
-import { createRouter } from './router.js';
+import { createRouter, createExternalRouter } from './router.js';
 import * as session from './session.js';
 
 const route = createRouter(patches);
+const routeExternal = createExternalRouter(patches);
 
 chrome.runtime.onStartup.addListener(() => session.ensureLoaded());
 chrome.runtime.onInstalled.addListener(() => session.ensureLoaded());
@@ -27,11 +28,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 if (chrome.runtime.onMessageExternal) {
   chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-    route(msg, sender)
+    routeExternal(msg, sender)
       .then(sendResponse)
       .catch((err) => {
-        console.error('[recorder] external handler failed:', msg.action, err);
-        sendResponse({ error: err.message });
+        console.error('[recorder] external handler failed:', msg?.action, err);
+        sendResponse({ success: false, error: err.message });
       });
     return true;
   });

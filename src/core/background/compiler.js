@@ -83,7 +83,9 @@ export function compileSteps(events) {
       // frameIdentity() actually reports.
       ...(event.surfaceId ? { surfaceId: event.surfaceId } : {}),
       ...(event.effects?.length ? { effects: event.effects } : {}),
-      ...(event.isTopFrame === false
+      ...(event.frame
+        ? { frame: event.frame }
+        : event.isTopFrame === false
         ? {
           frame: {
             url: event.frameUrl,
@@ -293,7 +295,9 @@ function element(action, event, extra = {}) {
   if (event.surfaceId) out.surfaceId = event.surfaceId;
   if (event.effects && event.effects.length) out.effects = event.effects;
 
-  if (event.isTopFrame === false) {
+  if (event.frame) {
+    out.frame = typeof event.frame === 'object' ? { ...event.frame } : event.frame;
+  } else if (event.isTopFrame === false) {
     out.frame = { url: event.frameUrl };
     if (event.frameName) out.frame.name = event.frameName;
     if (event.frameSelector) out.frame.selector = event.frameSelector;

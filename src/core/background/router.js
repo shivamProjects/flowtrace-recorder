@@ -196,10 +196,92 @@ export function createRouter(patches) {
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
 
+  const UI_ONLY_ACTIONS = new Set([
+    'AUTH_DEV_BYPASS',
+    'SET_SETTINGS',
+    'SET_PATCH',
+    'SET_ENVIRONMENT',
+    'AUTH_SIGN_OUT',
+    'CLEAR_RECORDING',
+  ]);
+
   return async function route(msg, sender) {
     await session.ensureLoaded();
-    const handler = handlers[msg.action];
-    if (!handler) return { error: `Unknown action: ${msg.action}` };
+    const action = msg?.action;
+    if (!action) return { error: 'Missing action field' };
+
+    // Content scripts injected into web pages must not invoke privileged UI management actions
+    if (sender?.tab && !isExtensionUrl(sender?.url) && UI_ONLY_ACTIONS.has(action)) {
+      return { success: false, error: `Action '${action}' is restricted to extension UI.` };
+    }
+
+    const handler = handlers[action];
+    if (!handler) return { error: `Unknown action: ${action}` };
+    return handler(msg, sender);
+  };
+}
+
+/** Allowed origins for external Chrome runtime messages */
+const TRUSTED_EXTERNAL_ORIGINS = [
+  'https://platform.shivambhaipatel.com',
+  'https://staging-platform.shivambhaipatel.com',
+  'http://localhost:3000',
+  'http://localhost:3200',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3200',
+];
+
+function isExtensionUrl(url) {
+  return typeof url === 'string' && (url.startsWith('chrome-extension://') || url.startsWith('moz-extension://'));
+}
+
+export function isAllowedExternalOrigin(sender) {
+  if (!sender) return false;
+  const rawOrigin = sender.origin || (sender.url ? safeOriginOf(sender.url) : null);
+  if (!rawOrigin) return false;
+  return TRUSTED_EXTERNAL_ORIGINS.includes(rawOrigin) ||
+    rawOrigin.endsWith('.shivambhaipatel.com') ||
+    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(rawOrigin);
+}
+
+function safeOriginOf(rawUrl) {
+  try {
+    return new URL(rawUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strict external router for `chrome.runtime.onMessageExternal`.
+ * Only allows an explicit minimal allowlist and validates sender origin.
+ */
+export function createExternalRouter(patches) {
+  session.setInjectFunction(inject);
+  session.setBroadcastFunction(broadcast);
+
+  const externalHandlers = {
+    PING_EXTENSION: async () => ({
+      success: true,
+      installed: true,
+      version: '1.0.0',
+      authenticated: await auth.isAuthenticated(),
+      isRecording: session.get().isRecording,
+    }),
+    GET_STATUS: () => ({ session: session.forTransport() }),
+    PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
+  };
+
+  return async function externalRoute(msg, sender) {
+    if (!isAllowedExternalOrigin(sender)) {
+      return { success: false, error: 'Unauthorized external caller origin.' };
+    }
+    await session.ensureLoaded();
+    const action = msg?.action;
+    const handler = externalHandlers[action];
+    if (!handler) {
+      return { success: false, error: `Action '${action}' is not permitted for external callers.` };
+    }
     return handler(msg, sender);
   };
 }

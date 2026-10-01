@@ -96,14 +96,18 @@ export async function devBypass() {
     fullName: 'FlowTrace Admin (Dev Mode)',
     role: 'ADMIN',
   };
-  await store.save(mockToken, mockUser);
+  await store.save(mockToken, mockUser, 'dev_bypass');
   try {
     await setEnvironment({
       id: '00000000-0000-4000-8000-000000000001',
       name: 'Local Development',
     });
   } catch {}
-  return { success: true, user: store.getUser() };
+  return { success: true, user: store.getUser(), authMode: 'dev_bypass' };
+}
+
+export function getAuthMode() {
+  return store.getAuthMode();
 }
 
 /**
