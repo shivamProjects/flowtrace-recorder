@@ -8,6 +8,7 @@
 
 import { RecordingDestination, DESTINATION_TYPE } from './types.js';
 import { apiErrorMessage, unwrap } from '../shared/settings.js';
+import { buildRecordingEnvelope } from '../compiler/envelope-factory.js';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -95,16 +96,23 @@ export class FlowTraceDestination extends RecordingDestination {
     const recDesc = description || envelope?.description || 'Recorded with FlowTrace';
 
     // Canonical Protocol 2.0 payload
+    const rawSteps = envelope?.steps || envelope?.actions || [];
+    const normalizedSteps = rawSteps.map((s) => ({
+      ...s,
+      action: s.action || s.type || 'click',
+    }));
+
     const payload = {
       name: recName,
       description: recDesc,
+      protocolVersion: '2.0',
       schemaVersion: envelope?.schemaVersion || 2,
       recorderVersion: envelope?.recorderVersion || '2.0.0',
-      producer: envelope?.producer || { name: '@flowtrace/recorder-core', version: '1.0.0' },
+      producer: envelope?.producer || { kind: 'desktop', version: '2.0.0' },
       patchId: envelope?.patchId || 'oracle',
-      sourceUrl: envelope?.sourceUrl || '',
+      sourceUrl: envelope?.sourceUrl || 'about:blank',
       actions: envelope?.actions || [],
-      steps: envelope?.steps || [],
+      steps: normalizedSteps,
       ...(environment?.id && environment.id !== 'default' ? { environmentId: environment.id } : {}),
     };
 
