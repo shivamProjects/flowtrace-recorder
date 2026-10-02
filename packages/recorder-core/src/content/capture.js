@@ -312,27 +312,21 @@ function evaluateAdapterObservation(type, target, event) {
   // 2. Legacy patch hook fallback
   if (type === 'click') {
     const claimed = safeInvoke(`${patch.id}.onClick`, patch.capture?.onClick, false, target, event, ctx);
-    if (claimed && typeof claimed === 'object' && claimed.type) {
-      return { kind: 'claim', candidate: claimed };
-    }
-    if (claimed === true) {
-      return { kind: 'claimed_in_hook' };
+    if (claimed && typeof claimed === 'object' && (claimed.type || claimed.kind)) {
+      if (claimed.kind === 'claim' && !claimed.candidate) return { kind: 'pass' };
+      return claimed.kind ? claimed : { kind: 'claim', candidate: claimed };
     }
   } else if (type === 'dblclick') {
     const claimed = safeInvoke(`${patch.id}.onDoubleClick`, patch.capture?.onDoubleClick, false, target, event, ctx);
-    if (claimed && typeof claimed === 'object' && claimed.type) {
-      return { kind: 'claim', candidate: claimed };
-    }
-    if (claimed === true) {
-      return { kind: 'claimed_in_hook' };
+    if (claimed && typeof claimed === 'object' && (claimed.type || claimed.kind)) {
+      if (claimed.kind === 'claim' && !claimed.candidate) return { kind: 'pass' };
+      return claimed.kind ? claimed : { kind: 'claim', candidate: claimed };
     }
   } else if (type === 'contextmenu') {
     const claimed = safeInvoke(`${patch.id}.onContextMenu`, patch.capture?.onContextMenu, false, target, event, ctx);
-    if (claimed && typeof claimed === 'object' && claimed.type) {
-      return { kind: 'claim', candidate: claimed };
-    }
-    if (claimed === true) {
-      return { kind: 'claimed_in_hook' };
+    if (claimed && typeof claimed === 'object' && (claimed.type || claimed.kind)) {
+      if (claimed.kind === 'claim' && !claimed.candidate) return { kind: 'pass' };
+      return claimed.kind ? claimed : { kind: 'claim', candidate: claimed };
     }
   } else if (type === 'input') {
     safeInvoke(`${patch.id}.onInput`, patch.capture?.onInput, undefined, target, event, ctx);
@@ -366,10 +360,6 @@ function onClick(e) {
   if (decision.kind === 'claim' && decision.candidate) {
     if (clickCorrelator) clickCorrelator.cancel();
     send(decision.candidate);
-    return;
-  }
-  if (decision.kind === 'claimed_in_hook') {
-    if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
@@ -422,10 +412,6 @@ function onDoubleClick(e) {
     send(decision.candidate);
     return;
   }
-  if (decision.kind === 'claimed_in_hook') {
-    if (clickCorrelator) clickCorrelator.cancel();
-    return;
-  }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};
 
   if (isCheckboxLike(target) || target.tagName === 'SELECT') return;
@@ -473,10 +459,6 @@ function onContextMenu(e) {
   if (decision.kind === 'claim' && decision.candidate) {
     if (clickCorrelator) clickCorrelator.cancel();
     send(decision.candidate);
-    return;
-  }
-  if (decision.kind === 'claimed_in_hook') {
-    if (clickCorrelator) clickCorrelator.cancel();
     return;
   }
   const augmentPayload = decision.kind === 'augment' && decision.patch ? decision.patch : {};

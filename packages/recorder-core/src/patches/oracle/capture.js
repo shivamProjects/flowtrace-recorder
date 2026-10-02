@@ -83,9 +83,10 @@ export const capture = {
   },
 
   onClick(target, _event, ctx) {
-    // A choice-list option is a selection, not a click. Claim it so the core
-    // does not also emit a bare click on the row.
-    if (claimChoiceListOption(target, ctx)) return true;
+    // A choice-list option is a selection, not a click. Return the candidate event
+    // so evaluateAdapterObservation claims it with the candidate action.
+    const candidate = claimChoiceListOption(target, ctx);
+    if (candidate) return candidate;
 
     captureLovRowContext(target, ctx);
     captureCalendarNavigation(target);
@@ -270,14 +271,14 @@ function hasAdjacentLovIcon(el) {
  * [role="option"] elements inside a popup. These are normalised to
  * `selectOption` (a stable, replay-safe action) rather than a positional click.
  *
- * @returns {boolean} true when handled
+ * @returns {Object|null} candidate event when handled, null otherwise
  */
 function claimChoiceListOption(target, ctx) {
   const option = target.closest(CHOICE_OPTION);
-  if (!option) return false;
+  if (!option) return null;
 
   const optionText = option.textContent.trim();
-  if (!optionText) return false;
+  if (!optionText) return null;
 
   // ── Oracle Redwood & JET Components ────────────────────────────────────
   // Redwood renders dropdowns in a floating popup detached from the host element.
@@ -289,7 +290,7 @@ function claimChoiceListOption(target, ctx) {
     const resolvedLabel = parsedOptionLabel || optionText;
     const hostLabel = getRedwoodLabel(jetHost) || resolveAdfLabel(jetHost) || jetHost.id || '';
 
-    ctx.emit(ctx.makeEvent('selectOption', jetHost, {
+    return ctx.makeEvent('selectOption', jetHost, {
       value: resolvedLabel,
       meta: {
         framework: 'oracle-redwood',
@@ -300,16 +301,15 @@ function claimChoiceListOption(target, ctx) {
         hostLabel,
         triggerSelector: ctx.selectorFor(jetHost).selector,
       },
-    }));
-    return true;
+    });
   }
 
   // ── ADF af:selectOneChoice ────────────────────────────────────────────────
-  if (!state.lastTrigger) return false;
-  if (Date.now() - state.lastTriggerAt > TRIGGER_MEMORY_MS) return false;
+  if (!state.lastTrigger) return null;
+  if (Date.now() - state.lastTriggerAt > TRIGGER_MEMORY_MS) return null;
 
   const triggerLabel = resolveAdfLabel(state.lastTrigger);
-  if (!triggerLabel) return false;
+  if (!triggerLabel) return null;
 
   // Prefer a locator that names the option; fall back to the role form when the
   // generated one is positional and would not survive a re-render.
@@ -318,7 +318,7 @@ function claimChoiceListOption(target, ctx) {
     ? generated
     : `page.getByRole('option', { name: '${escapeSingleQuote(optionText)}' })`;
 
-  ctx.emit(ctx.makeEvent('select', state.lastTrigger, {
+  const ev = ctx.makeEvent('select', state.lastTrigger, {
     value: optionText,
     locator,
     meta: {
@@ -326,12 +326,12 @@ function claimChoiceListOption(target, ctx) {
       selectByClick: true,
       triggerSelector: ctx.selectorFor(state.lastTrigger).selector,
     },
-  }));
+  });
 
   state.committedValues[triggerLabel] = optionText;
   ctx.updateContext({ committedValueMap: { [triggerLabel]: optionText } });
   state.lastTrigger = null;
-  return true;
+  return ev;
 }
 
 // ── list of values ──────────────────────────────────────────────────────────

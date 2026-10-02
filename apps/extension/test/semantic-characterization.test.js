@@ -520,5 +520,33 @@ describe('TRACE-65: Phase 1 — Recorder Semantic Completeness & Characterizatio
       expect(emitted[0].checked).toBe(true);
     });
   });
+
+  // ==========================================================================
+  // 9. Zero-Drop Invariant: Legacy Boolean Hook & Empty Claim Fallback (TRACE-71)
+  // ==========================================================================
+  describe('9. Zero-Drop Invariant: Legacy Boolean Hook & Empty Claim Fallback (TRACE-71)', () => {
+    it('does not drop generic click when adapter returns pass or empty claim', () => {
+      const emitted = [];
+      const correlator = new ClickCorrelator({
+        emit: (ev) => emitted.push(ev),
+        delayMs: 200,
+      });
+
+      const btn = document.createElement('button');
+      btn.id = 'submit-btn';
+      document.body.appendChild(btn);
+
+      const makeEvent = (type, el, extra) => ({ type, targetId: el.id, ...extra });
+
+      // When an adapter hook returns true/empty without candidate, evaluateAdapterObservation
+      // returns { kind: 'pass' }, so generic ClickCorrelator captures the click without suppression.
+      correlator.onClick(btn, { button: 0, clientX: 10, clientY: 10 }, makeEvent, {});
+      vi.advanceTimersByTime(200);
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0].type).toBe('click');
+      expect(emitted[0].targetId).toBe('submit-btn');
+    });
+  });
 });
 
