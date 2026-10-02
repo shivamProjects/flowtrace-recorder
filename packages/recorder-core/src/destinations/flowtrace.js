@@ -95,26 +95,42 @@ export class FlowTraceDestination extends RecordingDestination {
     const recName = name || envelope?.name || defaultRecordingName(envelope?.patchId);
     const recDesc = description || envelope?.description || 'Recorded with FlowTrace';
 
-    // Canonical Protocol 2.0 payload
+    // Canonical Protocol 2.0 payload construction
     const rawSteps = envelope?.steps || envelope?.actions || [];
-    const normalizedSteps = rawSteps.map((s) => ({
-      ...s,
-      action: s.action || s.type || 'click',
-    }));
+    const canonicalSteps = rawSteps.map((s) => {
+      const act = s.action || s.type || 'click';
+      const step = {
+        action: act,
+        ...(s.description ? { description: s.description } : {}),
+        effects: s.effects || [],
+        meta: s.meta || {},
+        ...(s.surfaceId ? { surfaceId: s.surfaceId } : {}),
+        ...(s.frame ? { frame: s.frame } : {}),
+        ...(s.locator ? { locator: s.locator } : (s.selector ? { locator: { selector: s.selector } } : {})),
+      };
+      if (act === 'navigate') {
+        step.value = s.value || s.url || 'about:blank';
+      } else if (act === 'fill') {
+        step.value = s.value != null ? String(s.value) : '';
+      } else if (act === 'click') {
+        if (s.button) step.button = s.button;
+      }
+      return step;
+    });
 
-    const payload = {
-      name: recName,
-      description: recDesc,
-      protocolVersion: '2.0',
-      schemaVersion: envelope?.schemaVersion || 2,
-      recorderVersion: envelope?.recorderVersion || '2.0.0',
+    const canonicalEnvelope = buildRecordingEnvelope({
+      recordingSessionId: envelope?.recordingSessionId,
+      recordedAt: envelope?.recordedAt,
       producer: envelope?.producer || { kind: 'desktop', version: '2.0.0' },
-      patchId: envelope?.patchId || 'oracle',
-      sourceUrl: envelope?.sourceUrl || 'about:blank',
-      actions: envelope?.actions || [],
-      steps: normalizedSteps,
-      ...(environment?.id && environment.id !== 'default' ? { environmentId: environment.id } : {}),
-    };
+      capabilities: envelope?.capabilities || ['multiSurface', 'nestedFrames', 'downloads', 'oracleADF'],
+      meta: {
+        name: recName,
+        description: recDesc,
+        sourceUrl: envelope?.sourceUrl || envelope?.meta?.sourceUrl || 'https://flowtrace.local',
+        patchId: envelope?.patchId || envelope?.meta?.patchId || 'generic',
+      },
+      steps: canonicalSteps,
+    });
 
     let response;
     try {
@@ -124,7 +140,7 @@ export class FlowTraceDestination extends RecordingDestination {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(canonicalEnvelope),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {

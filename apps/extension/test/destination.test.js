@@ -119,12 +119,13 @@ describe('Recorder Destination Architecture', () => {
     it('uploads canonical Protocol 2.0 RecordingEnvelope to /api/v1/recordings', async () => {
       routes['/api/v1/recordings'] = (init) => {
         const body = JSON.parse(init.body);
-        expect(body.name).toBe('Sample Recording');
-        expect(body.schemaVersion).toBe(SCHEMA_VERSION);
-        expect(body.patchId).toBe('oracle');
-        expect(body.actions.length).toBe(1);
+        expect(body.protocolVersion).toBe('2.0');
+        expect(body.meta.name).toBe('Sample Recording');
+        expect(body.meta.patchId).toBe('oracle');
+        expect(body.meta.sourceUrl).toBe('https://erp.example.com/fusion');
         expect(body.steps.length).toBe(1);
-        return ok({ id: 'rec_ft_123', name: body.name }, 201);
+        expect(body.steps[0].action).toBe('click');
+        return ok({ id: 'rec_ft_123', name: body.meta.name }, 201);
       };
 
       const result = await destination.uploadRecording({
