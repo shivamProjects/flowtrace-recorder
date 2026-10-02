@@ -20,12 +20,14 @@
 
 const API_BASE_KEY = 'apiBase';
 const ENVIRONMENT_KEY = 'environment';
+const DESTINATION_TYPE_KEY = 'destinationType';
 
 /**
- * Default target — the FlowTrace Cockpit server on localhost:3200.
+ * Default target — the FlowTrace Cockpit server on localhost:3200 / API on 3050.
  * Override per install from the popup's settings field.
  */
 export const DEFAULT_API_BASE = 'http://localhost:3050';
+export const DEFAULT_DESTINATION = 'platform';
 
 export async function getApiBase() {
   try {
@@ -40,6 +42,21 @@ export async function setApiBase(value) {
   const base = normaliseBase(value) || DEFAULT_API_BASE;
   await chrome.storage.local.set({ [API_BASE_KEY]: base });
   return base;
+}
+
+export async function getDestinationType() {
+  try {
+    const stored = await chrome.storage.local.get(DESTINATION_TYPE_KEY);
+    return stored[DESTINATION_TYPE_KEY] || DEFAULT_DESTINATION;
+  } catch {
+    return DEFAULT_DESTINATION;
+  }
+}
+
+export async function setDestinationType(value) {
+  const normalized = String(value || DEFAULT_DESTINATION).toLowerCase().trim();
+  await chrome.storage.local.set({ [DESTINATION_TYPE_KEY]: normalized });
+  return normalized;
 }
 
 /** Absolute URL for a backend path. */

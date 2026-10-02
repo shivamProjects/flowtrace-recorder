@@ -47,5 +47,6 @@ export * from './shared/settings.js';
 export * from './shared/types.js';
 
 export * from './components/registry.js';
+export * from './destinations/index.js';
 export * from './patches/index.js';
 
