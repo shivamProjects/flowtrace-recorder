@@ -156,6 +156,71 @@ describe('Recorder Destination Architecture', () => {
       expect(result.unauthenticated).toBe(true);
     });
 
+    it('losslessly converts and validates all SemanticStepV2 action types', async () => {
+      const fullActionSteps = [
+        { action: 'navigate', value: 'https://erp.example.com', url: 'https://erp.example.com' },
+        { action: 'click', locator: { selector: '#btn1' }, button: 'right', clickCount: 1, modifiers: { shift: true } },
+        { action: 'dblclick', locator: { selector: '#item1' }, clickCount: 2, position: { x: 10, y: 20 } },
+        { action: 'fill', locator: { selector: '#input1' }, value: 'Secret', committedValue: 'Secret', credentialRef: 'cred_1' },
+        { action: 'selectOption', locator: { selector: '#select1' }, value: 'opt1', values: ['opt1'], optionIndex: 2 },
+        { action: 'lovSelect', locator: { selector: '#lov1' }, value: 'Standard LOV Row', optionIndex: 0 },
+        { action: 'press', locator: { selector: '#input1' }, key: 'Tab', modifiers: { control: true } },
+        { action: 'check', locator: { selector: '#chk1' }, checked: true },
+        { action: 'uncheck', locator: { selector: '#chk2' }, checked: false },
+        { action: 'setInputFiles', locator: { selector: '#file1' }, files: ['invoice.pdf'], value: 'invoice.pdf' },
+        { action: 'scroll', locator: { selector: '#table1' }, deltaX: 0, deltaY: 250 },
+        { action: 'hover', locator: { selector: '#menu1' }, position: { x: 50, y: 15 } },
+        { action: 'copy', locator: { selector: '#po-number' }, outputName: 'PURCHASE_ORDER_ID', value: 'PO-9921' },
+        { action: 'wait', durationMs: 2500 },
+        { action: 'assertVisible', locator: { selector: '#toast' } },
+        { action: 'assertText', locator: { selector: '#status-msg' }, value: 'Order Approved' },
+        { action: 'assertValue', locator: { selector: '#total' }, value: '$1,250.00' },
+        { action: 'assertChecked', locator: { selector: '#chk-agree' }, checked: true },
+        { action: 'assertSnapshot', locator: { selector: '#invoice-preview' }, snapshot: 'snap_base64_hash' },
+      ];
+
+      routes['/api/v1/recordings'] = (init) => {
+        const body = JSON.parse(init.body);
+        expect(body.protocolVersion).toBe('2.0');
+        expect(body.steps.length).toBe(fullActionSteps.length);
+
+        // Verify each action's specific fields were losslessly retained
+        expect(body.steps[0].action).toBe('navigate');
+        expect(body.steps[1].modifiers).toEqual({ shift: true });
+        expect(body.steps[2].position).toEqual({ x: 10, y: 20 });
+        expect(body.steps[3].credentialRef).toBe('cred_1');
+        expect(body.steps[4].optionIndex).toBe(2);
+        expect(body.steps[5].value).toBe('Standard LOV Row');
+        expect(body.steps[6].key).toBe('Tab');
+        expect(body.steps[7].checked).toBe(true);
+        expect(body.steps[8].checked).toBe(false);
+        expect(body.steps[9].files).toEqual(['invoice.pdf']);
+        expect(body.steps[10].deltaY).toBe(250);
+        expect(body.steps[11].position).toEqual({ x: 50, y: 15 });
+        expect(body.steps[12].outputName).toBe('PURCHASE_ORDER_ID');
+        expect(body.steps[13].durationMs).toBe(2500);
+        expect(body.steps[14].action).toBe('assertVisible');
+        expect(body.steps[15].value).toBe('Order Approved');
+        expect(body.steps[16].value).toBe('$1,250.00');
+        expect(body.steps[17].checked).toBe(true);
+        expect(body.steps[18].snapshot).toBe('snap_base64_hash');
+
+        return ok({ id: 'rec_lossless_all', name: body.meta.name }, 201);
+      };
+
+      const result = await destination.uploadRecording({
+        envelope: {
+          ...sampleEnvelope,
+          steps: fullActionSteps,
+        },
+        apiBase: 'http://localhost:3050',
+        token: 'test-jwt-token',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.recording.id).toBe('rec_lossless_all');
+    });
+
     it('returns fallback environment when /api/v1/environments is not implemented', async () => {
       routes['/api/v1/environments'] = () => new Response('Not Found', { status: 404 });
 

@@ -101,20 +101,74 @@ export class FlowTraceDestination extends RecordingDestination {
       const act = s.action || s.type || 'click';
       const step = {
         action: act,
-        ...(s.description ? { description: s.description } : {}),
+        ...(s.description !== undefined ? { description: s.description } : {}),
+        ...(s.skipInReport !== undefined ? { skipInReport: Boolean(s.skipInReport) } : {}),
+        ...(s.required !== undefined ? { required: Boolean(s.required) } : {}),
+        ...(s.requiredSource !== undefined ? { requiredSource: s.requiredSource } : {}),
+        ...(s.requiredScope !== undefined ? { requiredScope: s.requiredScope } : {}),
+        ...(s.surfaceId !== undefined ? { surfaceId: s.surfaceId } : {}),
+        ...(s.frame !== undefined ? { frame: s.frame } : {}),
+        ...(s.locator !== undefined
+          ? { locator: s.locator }
+          : (s.selector ? { locator: { selector: s.selector } } : {})),
         effects: s.effects || [],
         meta: s.meta || {},
-        ...(s.surfaceId ? { surfaceId: s.surfaceId } : {}),
-        ...(s.frame ? { frame: s.frame } : {}),
-        ...(s.locator ? { locator: s.locator } : (s.selector ? { locator: { selector: s.selector } } : {})),
       };
+
       if (act === 'navigate') {
         step.value = s.value || s.url || 'about:blank';
+        if (s.url) step.url = s.url;
+      } else if (act === 'click' || act === 'dblclick') {
+        if (s.button) step.button = s.button;
+        if (s.clickCount) step.clickCount = s.clickCount;
+        if (s.modifiers) step.modifiers = s.modifiers;
+        if (s.position) step.position = s.position;
       } else if (act === 'fill') {
         step.value = s.value != null ? String(s.value) : '';
-      } else if (act === 'click') {
-        if (s.button) step.button = s.button;
+        if (s.committedValue !== undefined) step.committedValue = s.committedValue;
+        if (s.credentialRef !== undefined) step.credentialRef = s.credentialRef;
+      } else if (act === 'selectOption') {
+        if (s.value !== undefined) step.value = s.value;
+        if (s.values !== undefined) step.values = s.values;
+        if (s.optionIndex !== undefined) step.optionIndex = s.optionIndex;
+      } else if (act === 'lovSelect') {
+        step.value = s.value != null ? String(s.value) : '';
+        if (s.optionIndex !== undefined) step.optionIndex = s.optionIndex;
+      } else if (act === 'press') {
+        step.key = s.key || s.value || 'Enter';
+        if (s.modifiers) step.modifiers = s.modifiers;
+      } else if (act === 'check') {
+        step.checked = s.checked !== false;
+      } else if (act === 'uncheck') {
+        step.checked = false;
+      } else if (act === 'setInputFiles') {
+        step.files = Array.isArray(s.files) ? s.files : (s.value ? [String(s.value)] : []);
+        if (s.value !== undefined) step.value = s.value;
+      } else if (act === 'scroll') {
+        if (s.deltaX !== undefined) step.deltaX = s.deltaX;
+        if (s.deltaY !== undefined) step.deltaY = s.deltaY;
+      } else if (act === 'hover') {
+        if (s.position) step.position = s.position;
+      } else if (act === 'copy') {
+        if (s.outputName !== undefined) step.outputName = s.outputName;
+        if (s.value !== undefined) step.value = s.value;
+      } else if (act === 'wait') {
+        step.durationMs = s.durationMs != null ? Number(s.durationMs) : (s.value ? Number(s.value) : 1000);
+      } else if (act === 'assertText' || act === 'assertValue') {
+        step.value = s.value != null ? String(s.value) : '';
+      } else if (act === 'assertChecked') {
+        step.checked = Boolean(s.checked);
+      } else if (act === 'assertSnapshot') {
+        step.snapshot = s.snapshot || s.value || '';
       }
+
+      // Preserve all other properties losslessly
+      for (const [k, v] of Object.entries(s)) {
+        if (step[k] === undefined && v !== undefined) {
+          step[k] = v;
+        }
+      }
+
       return step;
     });
 
