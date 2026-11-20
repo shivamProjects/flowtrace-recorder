@@ -31,7 +31,15 @@ export function createRouter(patches) {
   session.setBroadcastFunction(broadcast);
 
   const handlers = {
-    GET_STATUS: () => ({ session: session.forTransport() }),
+    GET_STATUS: (_msg, sender) => ({
+      session: isPrivilegedExtensionSender(sender)
+        ? session.forTransport()
+        : session.forContentScript(),
+    }),
+
+    GET_CAPTURE_ACTIVE: () => ({ session: session.forContentScript() }),
+
+    PING: () => ({ ok: true, isRecording: session.get().isRecording }),
 
     GET_PATCHES: () => ({
       patches: patches.listPatches(),
@@ -52,19 +60,40 @@ export function createRouter(patches) {
     },
 
     START_RECORDING: (msg) => startRecording(msg, patches),
-    STOP_RECORDING: () => stopRecording(patches),
+    STOP_RECORDING: async (_msg, sender) => {
+      const s = session.get();
+      if (!isPrivilegedExtensionSender(sender)) {
+        const surfaceRegistry = session.getSurfaceRegistry();
+        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+          return { success: false, error: 'Unrecognized surface.' };
+        }
+      }
+      return stopRecording(patches);
+    },
 
-    PAUSE_RECORDING: async () => {
+    PAUSE_RECORDING: async (_msg, sender) => {
       const s = session.get();
       if (!s.isRecording) return { success: false, error: 'Not recording.' };
+      if (!isPrivilegedExtensionSender(sender)) {
+        const surfaceRegistry = session.getSurfaceRegistry();
+        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+          return { success: false, error: 'Unrecognized surface.' };
+        }
+      }
       s.isPaused = true;
       await session.persist();
       return { success: true, isPaused: true };
     },
 
-    RESUME_RECORDING: async () => {
+    RESUME_RECORDING: async (_msg, sender) => {
       const s = session.get();
       if (!s.isRecording) return { success: false, error: 'Not recording.' };
+      if (!isPrivilegedExtensionSender(sender)) {
+        const surfaceRegistry = session.getSurfaceRegistry();
+        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+          return { success: false, error: 'Unrecognized surface.' };
+        }
+      }
       s.isPaused = false;
       await session.persist();
       return { success: true, isPaused: false };
@@ -143,7 +172,10 @@ export function createRouter(patches) {
     PATCH_CONTEXT_UPDATE: (msg, sender) => {
       const s = session.get();
       if (!s.isRecording) return { ok: false };
-      if (sender.tab && sender.tab.id !== s.activeTabId) return { ok: false };
+      const surfaceRegistry = session.getSurfaceRegistry();
+      if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+        return { ok: false, reason: 'unrecognized_surface' };
+      }
       session.mergePatchContext(msg.context);
       return { ok: true };
     },
@@ -203,22 +235,13 @@ export function createRouter(patches) {
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
 
-  const UI_ONLY_ACTIONS = new Set([
-    'AUTH_DEV_BYPASS',
-    'SET_SETTINGS',
-    'SET_PATCH',
-    'SET_ENVIRONMENT',
-    'AUTH_SIGN_OUT',
-    'CLEAR_RECORDING',
-  ]);
-
   return async function route(msg, sender) {
     await session.ensureLoaded();
     const action = msg?.action;
     if (!action) return { error: 'Missing action field' };
 
-    // Content scripts injected into web pages must not invoke privileged UI management actions
-    if (sender?.tab && !isExtensionUrl(sender?.url) && UI_ONLY_ACTIONS.has(action)) {
+    // Content scripts and untrusted senders must only invoke explicitly allowlisted capture actions
+    if (!isPrivilegedExtensionSender(sender) && !CONTENT_SCRIPT_ALLOWED_ACTIONS.has(action)) {
       return { success: false, error: `Action '${action}' is restricted to extension UI.` };
     }
 
@@ -226,6 +249,74 @@ export function createRouter(patches) {
     if (!handler) return { error: `Unknown action: ${action}` };
     return handler(msg, sender);
   };
+}
+
+/** Explicit allowlist of message actions permitted from content scripts. Everything else is restricted to extension UI. */
+export const CONTENT_SCRIPT_ALLOWED_ACTIONS = new Set([
+  'GET_STATUS',
+  'GET_CAPTURE_ACTIVE',
+  'RECORD_EVENT',
+  'PATCH_CONTEXT_UPDATE',
+  'STOP_RECORDING',
+  'PAUSE_RECORDING',
+  'RESUME_RECORDING',
+  'PING',
+]);
+
+/**
+ * Validates whether a message sender is privileged extension UI (e.g. popup, options, internal worker).
+ * Scopes extension UI URLs strictly to this extension's runtime ID.
+ */
+export function isPrivilegedExtensionSender(sender) {
+  if (!sender) return true;
+
+  const currentExtId = (typeof chrome !== 'undefined' && chrome?.runtime?.id) ? chrome.runtime.id : null;
+
+  // Check URL if present
+  if (sender.url && typeof sender.url === 'string') {
+    if (currentExtId) {
+      if (sender.url.startsWith(`chrome-extension://${currentExtId}/`) ||
+          sender.url.startsWith(`moz-extension://${currentExtId}/`)) {
+        return true;
+      }
+      if (sender.url.startsWith('chrome-extension://') || sender.url.startsWith('moz-extension://')) {
+        return false;
+      }
+    } else {
+      if (sender.url.startsWith('chrome-extension://') || sender.url.startsWith('moz-extension://')) {
+        return true;
+      }
+    }
+  }
+
+  // Check origin if present
+  if (sender.origin && typeof sender.origin === 'string') {
+    if (currentExtId) {
+      if (sender.origin === `chrome-extension://${currentExtId}` ||
+          sender.origin === `moz-extension://${currentExtId}`) {
+        return true;
+      }
+      if (sender.origin.startsWith('chrome-extension://') || sender.origin.startsWith('moz-extension://')) {
+        return false;
+      }
+    } else {
+      if (sender.origin.startsWith('chrome-extension://') || sender.origin.startsWith('moz-extension://')) {
+        return true;
+      }
+    }
+  }
+
+  // Senders with a tab represent injected content scripts unless matching the extension URL above
+  if (sender.tab) {
+    return false;
+  }
+
+  // Senders with an external web URL or origin are unprivileged
+  if (sender.url || sender.origin) {
+    return false;
+  }
+
+  return true;
 }
 
 /** Allowed origins for external Chrome runtime messages */
@@ -238,10 +329,6 @@ const TRUSTED_EXTERNAL_ORIGINS = new Set([
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3200',
 ]);
-
-function isExtensionUrl(url) {
-  return typeof url === 'string' && (url.startsWith('chrome-extension://') || url.startsWith('moz-extension://'));
-}
 
 export function isAllowedExternalOrigin(sender) {
   if (!sender) return false;

@@ -65,9 +65,10 @@ function main() {
     }
   });
 
-  // Platform Web App Direct Bridge (for platform.shivambhaipatel.com / localhost)
+  // Platform Web App Detection (harmless presence check only; privileged actions must use chrome.runtime.onMessageExternal)
   window.addEventListener('message', (event) => {
-    if (event.source !== window || !event.data || typeof event.data !== 'object') return;
+    const isSameWindow = event.source === window || (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test');
+    if (!isSameWindow || !event.data || typeof event.data !== 'object') return;
     if (event.data.type === '__FLOWTRACE_PLATFORM_PING__') {
       window.postMessage({
         type: '__FLOWTRACE_PLATFORM_PONG__',
@@ -75,16 +76,6 @@ function main() {
         version: '1.0.0',
         recording: bus.isRecording(),
       }, '*');
-    } else if (event.data.type === '__FLOWTRACE_PLATFORM_LAUNCH__') {
-      chrome.runtime.sendMessage({
-        action: 'PLATFORM_LAUNCH_SESSION',
-        ...(event.data.payload || {}),
-      }, (res) => {
-        window.postMessage({
-          type: '__FLOWTRACE_PLATFORM_LAUNCH_RESPONSE__',
-          result: res,
-        }, '*');
-      });
     }
   });
 
