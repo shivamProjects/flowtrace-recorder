@@ -35,14 +35,6 @@ export function createRouter(patches) {
       if (isPrivilegedExtensionSender(sender)) {
         return { session: session.forTransport() };
       }
-      const s = session.get();
-      if (s.isRecording) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        const tabId = sender?.tab?.id;
-        if (!tabId || (tabId !== s.activeTabId && !surfaceRegistry.hasTab(tabId))) {
-          return { session: { isRecording: false, isPaused: false, patchId: null, eventCount: 0 } };
-        }
-      }
       return { session: session.forContentScript() };
     },
 
@@ -50,29 +42,10 @@ export function createRouter(patches) {
       if (isPrivilegedExtensionSender(sender)) {
         return { session: session.forTransport() };
       }
-      const s = session.get();
-      if (s.isRecording) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        const tabId = sender?.tab?.id;
-        if (!tabId || (tabId !== s.activeTabId && !surfaceRegistry.hasTab(tabId))) {
-          return { session: { isRecording: false, isPaused: false, patchId: null, eventCount: 0 } };
-        }
-      }
       return { session: session.forContentScript() };
     },
 
-    PING: (_msg, sender) => {
-      const isPrivileged = isPrivilegedExtensionSender(sender);
-      const s = session.get();
-      if (!isPrivileged && s.isRecording) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        const tabId = sender?.tab?.id;
-        if (!tabId || (tabId !== s.activeTabId && !surfaceRegistry.hasTab(tabId))) {
-          return { ok: false, isRecording: false, reason: 'unrecognized_surface' };
-        }
-      }
-      return { ok: true, isRecording: s.isRecording };
-    },
+    PING: () => ({ ok: true, isRecording: session.get().isRecording }),
 
     GET_PATCHES: () => ({
       patches: patches.listPatches(),
@@ -97,12 +70,6 @@ export function createRouter(patches) {
       const s = session.get();
       if (!s.isRecording) return { success: false, error: 'No active recording.' };
       const isPrivileged = isPrivilegedExtensionSender(sender);
-      if (!isPrivileged) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
-          return { success: false, error: 'Unrecognized surface.' };
-        }
-      }
       const result = await stopRecording(patches);
       if (!isPrivileged) {
         return { success: result.success, eventCount: result.eventCount };
@@ -110,29 +77,17 @@ export function createRouter(patches) {
       return result;
     },
 
-    PAUSE_RECORDING: async (_msg, sender) => {
+    PAUSE_RECORDING: async () => {
       const s = session.get();
       if (!s.isRecording) return { success: false, error: 'Not recording.' };
-      if (!isPrivilegedExtensionSender(sender)) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
-          return { success: false, error: 'Unrecognized surface.' };
-        }
-      }
       s.isPaused = true;
       await session.persist();
       return { success: true, isPaused: true };
     },
 
-    RESUME_RECORDING: async (_msg, sender) => {
+    RESUME_RECORDING: async () => {
       const s = session.get();
       if (!s.isRecording) return { success: false, error: 'Not recording.' };
-      if (!isPrivilegedExtensionSender(sender)) {
-        const surfaceRegistry = session.getSurfaceRegistry();
-        if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
-          return { success: false, error: 'Unrecognized surface.' };
-        }
-      }
       s.isPaused = false;
       await session.persist();
       return { success: true, isPaused: false };
@@ -279,9 +234,43 @@ export function createRouter(patches) {
     const action = msg?.action;
     if (!action) return { error: 'Missing action field' };
 
-    // Content scripts and untrusted senders must only invoke explicitly allowlisted capture actions
-    if (!isPrivilegedExtensionSender(sender) && !CONTENT_SCRIPT_ALLOWED_ACTIONS.has(action)) {
-      return { success: false, error: `Action '${action}' is restricted to extension UI.` };
+    const isPrivileged = isPrivilegedExtensionSender(sender);
+
+    // If caller is NOT privileged extension UI, enforce strict content-script sender qualification
+    if (!isPrivileged) {
+      // Must be an allowlisted action for content scripts
+      if (!CONTENT_SCRIPT_ALLOWED_ACTIONS.has(action)) {
+        return { success: false, error: `Action '${action}' is restricted to extension UI.` };
+      }
+
+      // Sender object must exist, be an object, and runtime ID must match
+      const currentExtId = (typeof chrome !== 'undefined' && chrome?.runtime?.id) ? chrome.runtime.id : null;
+      const isValidSender = sender && typeof sender === 'object' && currentExtId && (!sender.id || sender.id === currentExtId);
+      const hasValidTab = isValidSender && sender.tab && typeof sender.tab.id === 'number';
+
+      const s = session.get();
+      const surfaceRegistry = session.getSurfaceRegistry();
+      const tabId = hasValidTab ? sender.tab.id : null;
+      const isRegisteredTab = (tabId !== null && s.activeTabId !== null && s.activeTabId !== undefined)
+        ? (tabId === s.activeTabId || surfaceRegistry.hasTab(tabId))
+        : false;
+
+      // When sender is invalid or tab is not registered: reject mutations and deny active/stopped session state
+      if (!isValidSender || !hasValidTab || !isRegisteredTab) {
+        if (action === 'RECORD_EVENT') {
+          return { accepted: false, success: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'PATCH_CONTEXT_UPDATE') {
+          return { ok: false, success: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'PING') {
+          return { ok: false, isRecording: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'GET_STATUS' || action === 'GET_CAPTURE_ACTIVE') {
+          return { session: { isRecording: false, isPaused: false, patchId: null, eventCount: 0 } };
+        }
+        return { success: false, error: 'Unrecognized surface.' };
+      }
     }
 
     const handler = handlers[action];
@@ -323,20 +312,14 @@ export function isPrivilegedExtensionSender(sender) {
     (sender.url.startsWith(expectedPrefix) || sender.url.startsWith(expectedMozPrefix));
   const hasMatchingOrigin = typeof sender.origin === 'string' &&
     (sender.origin === expectedOrigin || sender.origin === expectedMozOrigin);
-  const hasMatchingId = sender.id === currentExtId && !sender.tab;
 
   // Senders with a tab must match the extension UI prefix (e.g. extension page opened in a tab)
   if (sender.tab) {
     return hasMatchingUrl;
   }
 
-  // Without a tab, must have valid extension URL, extension origin, or matching extension id
-  if (hasMatchingUrl || hasMatchingOrigin || hasMatchingId) {
-    return true;
-  }
-
-  // Fails closed by default
-  return false;
+  // Without a tab, must have valid extension URL or extension origin
+  return hasMatchingUrl || hasMatchingOrigin;
 }
 
 /** Allowed origins for external Chrome runtime messages */

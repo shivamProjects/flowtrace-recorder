@@ -25,6 +25,9 @@ function installChrome() {
   };
 
   globalThis.chrome = {
+    runtime: {
+      id: 'ijbehkijmihjnhbmbdmoglbbajbkadbd',
+    },
     storage: {
       local: {
         get: vi.fn(async (keys) => {
