@@ -31,7 +31,21 @@ export function createRouter(patches) {
   session.setBroadcastFunction(broadcast);
 
   const handlers = {
-    GET_STATUS: () => ({ session: session.forTransport() }),
+    GET_STATUS: (_msg, sender) => {
+      if (isPrivilegedExtensionSender(sender)) {
+        return { session: session.forTransport() };
+      }
+      return { session: session.forContentScript() };
+    },
+
+    GET_CAPTURE_ACTIVE: (_msg, sender) => {
+      if (isPrivilegedExtensionSender(sender)) {
+        return { session: session.forTransport() };
+      }
+      return { session: session.forContentScript() };
+    },
+
+    PING: () => ({ ok: true, isRecording: session.get().isRecording }),
 
     GET_PATCHES: () => ({
       patches: patches.listPatches(),
@@ -52,7 +66,16 @@ export function createRouter(patches) {
     },
 
     START_RECORDING: (msg) => startRecording(msg, patches),
-    STOP_RECORDING: () => stopRecording(patches),
+    STOP_RECORDING: async (_msg, sender) => {
+      const s = session.get();
+      if (!s.isRecording) return { success: false, error: 'No active recording.' };
+      const isPrivileged = isPrivilegedExtensionSender(sender);
+      const result = await stopRecording(patches);
+      if (!isPrivileged) {
+        return { success: result.success, eventCount: result.eventCount };
+      }
+      return result;
+    },
 
     PAUSE_RECORDING: async () => {
       const s = session.get();
@@ -143,7 +166,10 @@ export function createRouter(patches) {
     PATCH_CONTEXT_UPDATE: (msg, sender) => {
       const s = session.get();
       if (!s.isRecording) return { ok: false };
-      if (sender.tab && sender.tab.id !== s.activeTabId) return { ok: false };
+      const surfaceRegistry = session.getSurfaceRegistry();
+      if (sender?.tab && sender.tab.id !== s.activeTabId && !surfaceRegistry.hasTab(sender.tab.id)) {
+        return { ok: false, reason: 'unrecognized_surface' };
+      }
       session.mergePatchContext(msg.context);
       return { ok: true };
     },
@@ -203,29 +229,97 @@ export function createRouter(patches) {
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
 
-  const UI_ONLY_ACTIONS = new Set([
-    'AUTH_DEV_BYPASS',
-    'SET_SETTINGS',
-    'SET_PATCH',
-    'SET_ENVIRONMENT',
-    'AUTH_SIGN_OUT',
-    'CLEAR_RECORDING',
-  ]);
-
   return async function route(msg, sender) {
     await session.ensureLoaded();
     const action = msg?.action;
     if (!action) return { error: 'Missing action field' };
 
-    // Content scripts injected into web pages must not invoke privileged UI management actions
-    if (sender?.tab && !isExtensionUrl(sender?.url) && UI_ONLY_ACTIONS.has(action)) {
-      return { success: false, error: `Action '${action}' is restricted to extension UI.` };
+    const isPrivileged = isPrivilegedExtensionSender(sender);
+
+    // If caller is NOT privileged extension UI, enforce strict content-script sender qualification
+    if (!isPrivileged) {
+      // Must be an allowlisted action for content scripts
+      if (!CONTENT_SCRIPT_ALLOWED_ACTIONS.has(action)) {
+        return { success: false, error: `Action '${action}' is restricted to extension UI.` };
+      }
+
+      // Sender object must exist, be an object, and runtime ID must match
+      const currentExtId = (typeof chrome !== 'undefined' && chrome?.runtime?.id) ? chrome.runtime.id : null;
+      const isValidSender = sender && typeof sender === 'object' && currentExtId && (!sender.id || sender.id === currentExtId);
+      const hasValidTab = isValidSender && sender.tab && typeof sender.tab.id === 'number';
+
+      const s = session.get();
+      const surfaceRegistry = session.getSurfaceRegistry();
+      const tabId = hasValidTab ? sender.tab.id : null;
+      const isRegisteredTab = (tabId !== null && s.activeTabId !== null && s.activeTabId !== undefined)
+        ? (tabId === s.activeTabId || surfaceRegistry.hasTab(tabId))
+        : false;
+
+      // When sender is invalid or tab is not registered: reject mutations and deny active/stopped session state
+      if (!isValidSender || !hasValidTab || !isRegisteredTab) {
+        if (action === 'RECORD_EVENT') {
+          return { accepted: false, success: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'PATCH_CONTEXT_UPDATE') {
+          return { ok: false, success: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'PING') {
+          return { ok: false, isRecording: false, reason: 'unrecognized_surface' };
+        }
+        if (action === 'GET_STATUS' || action === 'GET_CAPTURE_ACTIVE') {
+          return { session: { isRecording: false, isPaused: false, patchId: null, eventCount: 0 } };
+        }
+        return { success: false, error: 'Unrecognized surface.' };
+      }
     }
 
     const handler = handlers[action];
     if (!handler) return { error: `Unknown action: ${action}` };
     return handler(msg, sender);
   };
+}
+
+/** Explicit allowlist of message actions permitted from content scripts. Everything else is restricted to extension UI. */
+export const CONTENT_SCRIPT_ALLOWED_ACTIONS = new Set([
+  'GET_STATUS',
+  'GET_CAPTURE_ACTIVE',
+  'RECORD_EVENT',
+  'PATCH_CONTEXT_UPDATE',
+  'STOP_RECORDING',
+  'PAUSE_RECORDING',
+  'RESUME_RECORDING',
+  'PING',
+]);
+
+/**
+ * Validates whether a message sender is privileged extension UI (e.g. popup, options, internal worker).
+ * Scopes extension UI URLs strictly to this extension's runtime ID.
+ * Strictly fails closed for absent, null, empty ({}), or malformed senders.
+ */
+export function isPrivilegedExtensionSender(sender) {
+  if (!sender || typeof sender !== 'object') return false;
+
+  const currentExtId = (typeof chrome !== 'undefined' && chrome?.runtime?.id) ? chrome.runtime.id : null;
+  // Strictly fail closed if runtime ID is absent
+  if (!currentExtId) return false;
+
+  const expectedPrefix = `chrome-extension://${currentExtId}/`;
+  const expectedMozPrefix = `moz-extension://${currentExtId}/`;
+  const expectedOrigin = `chrome-extension://${currentExtId}`;
+  const expectedMozOrigin = `moz-extension://${currentExtId}`;
+
+  const hasMatchingUrl = typeof sender.url === 'string' &&
+    (sender.url.startsWith(expectedPrefix) || sender.url.startsWith(expectedMozPrefix));
+  const hasMatchingOrigin = typeof sender.origin === 'string' &&
+    (sender.origin === expectedOrigin || sender.origin === expectedMozOrigin);
+
+  // Senders with a tab must match the extension UI prefix (e.g. extension page opened in a tab)
+  if (sender.tab) {
+    return hasMatchingUrl;
+  }
+
+  // Without a tab, must have valid extension URL or extension origin
+  return hasMatchingUrl || hasMatchingOrigin;
 }
 
 /** Allowed origins for external Chrome runtime messages */
@@ -238,10 +332,6 @@ const TRUSTED_EXTERNAL_ORIGINS = new Set([
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3200',
 ]);
-
-function isExtensionUrl(url) {
-  return typeof url === 'string' && (url.startsWith('chrome-extension://') || url.startsWith('moz-extension://'));
-}
 
 export function isAllowedExternalOrigin(sender) {
   if (!sender) return false;
