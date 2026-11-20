@@ -56,10 +56,14 @@ const ENVIRONMENT = {
   type: 'ORACLE_FUSION',
 };
 
+const EXT_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
+const UI_SENDER = { url: `chrome-extension://${EXT_ID}/popup.html`, id: EXT_ID };
+
 /** Fake chrome.storage.local, which is all these modules use. */
 function installChrome() {
   const store = {};
   globalThis.chrome = {
+    runtime: { id: EXT_ID },
     storage: {
       local: {
         get: async (keys) => {
@@ -125,7 +129,11 @@ async function loadModules() {
   const auth = await import('../src/core/auth/index.js');
   const store = await import('../src/core/auth/store.js');
   const settings = await import('@flowtrace/recorder-core');
-  const { createRouter } = await import('../src/core/background/router.js');
+  const routerMod = await import('../src/core/background/router.js');
+  const createRouter = (patches) => {
+    const raw = routerMod.createRouter(patches);
+    return (msg, sender) => raw(msg, !sender || Object.keys(sender).length === 0 ? UI_SENDER : sender);
+  };
   return { auth, store, settings, createRouter };
 }
 

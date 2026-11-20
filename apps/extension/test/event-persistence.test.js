@@ -46,9 +46,13 @@ const ENVIRONMENT = {
   type: 'ORACLE_FUSION',
 };
 
+const EXT_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
+const UI_SENDER = { url: `chrome-extension://${EXT_ID}/popup.html`, id: EXT_ID };
+
 function installChrome() {
   store = {};
   globalThis.chrome = {
+    runtime: { id: EXT_ID },
     storage: {
       local: {
         get: async (keys) => {
@@ -112,7 +116,7 @@ afterEach(() => {
   delete globalThis.fetch;
 });
 
-const route = (msg, sender = {}) => createRouter(patches)(msg, sender);
+const route = (msg, sender = UI_SENDER) => createRouter(patches)(msg, sender);
 
 async function startRecording() {
   const res = await route({

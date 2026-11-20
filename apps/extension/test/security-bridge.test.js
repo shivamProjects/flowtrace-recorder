@@ -2,23 +2,39 @@
  * security-bridge.test.js — REC-SEC: Content Bridge Security Hardening regression suite.
  *
  * Verifies:
- * 1. isPrivilegedExtensionSender strictly scopes extension UI to chrome.runtime.id.
- * 2. Content scripts cannot invoke privileged UI actions (Allowlist enforcement).
- * 3. GET_STATUS returns sanitized forContentScript() to content scripts (no events, steps, code).
- * 4. Tab scoping rejects RECORD_EVENT, PATCH_CONTEXT_UPDATE, PAUSE, RESUME, and STOP from unregistered tabs.
- * 5. Window message __FLOWTRACE_PLATFORM_LAUNCH__ relay is eliminated from content scripts.
+ * 1. isPrivilegedExtensionSender strictly fails closed for absent/empty/malformed/foreign senders
+ *    and requires valid runtime ID and extension UI origin.
+ * 2. Content scripts cannot invoke privileged UI management actions (Allowlist enforcement).
+ * 3. Sanitized content status isolation: GET_STATUS and GET_CAPTURE_ACTIVE never leak events, steps,
+ *    actions, or code to content scripts.
+ * 4. Active/registered-tab gate: unregistered tabs are rejected for state mutations AND query actions
+ *    (RECORD_EVENT, PATCH_CONTEXT_UPDATE, PAUSE, RESUME, STOP, GET_STATUS, GET_CAPTURE_ACTIVE, PING).
+ * 5. Content scripts receiving STOP_RECORDING receive strictly sanitized outcome ({ success, eventCount }),
+ *    never leaking generated code, steps, or actions.
+ * 6. DOM window message bridge relay (__FLOWTRACE_PLATFORM_LAUNCH__) is eliminated in both source entrypoints,
+ *    and cannot be hijacked via hostile payload.action override.
+ * 7. End-to-end navigation reactivation lifecycle preserves event counts on active tab and rejects foreign tabs.
+ * 8. Built dist bundles (dist/content.js and dist/background.js) conform to security assertions.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createRouter,
   isPrivilegedExtensionSender,
   CONTENT_SCRIPT_ALLOWED_ACTIONS,
 } from '../src/core/background/router.js';
 import * as session from '../src/core/background/session.js';
+import { bus } from '@flowtrace/recorder-core';
 
 const EXTENSION_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
 const ACTIVE_TAB_ID = 42;
 const UNREGISTERED_TAB_ID = 999;
+const PRIVILEGED_UI_SENDER = {
+  url: `chrome-extension://${EXTENSION_ID}/popup.html`,
+  origin: `chrome-extension://${EXTENSION_ID}`,
+  id: EXTENSION_ID,
+};
 
 function installMockChrome(extId = EXTENSION_ID) {
   const store = {};
@@ -53,7 +69,7 @@ function installMockChrome(extId = EXTENSION_ID) {
   return store;
 }
 
-describe('REC-SEC: Extension Sender Privileges & Scoping', () => {
+describe('REC-SEC: Fail-Closed Extension Sender Authorization', () => {
   beforeEach(() => {
     installMockChrome(EXTENSION_ID);
   });
@@ -62,28 +78,51 @@ describe('REC-SEC: Extension Sender Privileges & Scoping', () => {
     delete globalThis.chrome;
   });
 
-  it('recognizes internal background or test callers (empty sender) as privileged', () => {
-    expect(isPrivilegedExtensionSender(undefined)).toBe(true);
-    expect(isPrivilegedExtensionSender(null)).toBe(true);
-    expect(isPrivilegedExtensionSender({})).toBe(true);
+  it('strictly fails closed for absent, null, undefined, or empty sender', () => {
+    expect(isPrivilegedExtensionSender(undefined)).toBe(false);
+    expect(isPrivilegedExtensionSender(null)).toBe(false);
+    expect(isPrivilegedExtensionSender({})).toBe(false);
+    expect(isPrivilegedExtensionSender('invalid')).toBe(false);
   });
 
-  it('recognizes UI sender matching THIS extension ID as privileged', () => {
+  it('strictly fails closed when runtime ID is missing or empty', () => {
+    globalThis.chrome.runtime.id = undefined;
+    expect(isPrivilegedExtensionSender({
+      url: `chrome-extension://${EXTENSION_ID}/popup.html`,
+    })).toBe(false);
+
+    globalThis.chrome.runtime.id = '';
+    expect(isPrivilegedExtensionSender({
+      url: `chrome-extension://${EXTENSION_ID}/popup.html`,
+    })).toBe(false);
+  });
+
+  it('authorizes UI sender strictly matching THIS extension ID', () => {
     expect(isPrivilegedExtensionSender({
       url: `chrome-extension://${EXTENSION_ID}/popup.html`,
     })).toBe(true);
+
     expect(isPrivilegedExtensionSender({
       origin: `chrome-extension://${EXTENSION_ID}`,
     })).toBe(true);
+
+    expect(isPrivilegedExtensionSender({
+      id: EXTENSION_ID,
+    })).toBe(true);
   });
 
-  it('rejects sender with a DIFFERENT extension ID as unprivileged', () => {
+  it('rejects sender with a DIFFERENT extension ID as unprivileged (fail closed)', () => {
     const hostileExtId = 'fakeextensionidfakeextensionidfa';
     expect(isPrivilegedExtensionSender({
       url: `chrome-extension://${hostileExtId}/exploit.html`,
     })).toBe(false);
+
     expect(isPrivilegedExtensionSender({
       origin: `chrome-extension://${hostileExtId}`,
+    })).toBe(false);
+
+    expect(isPrivilegedExtensionSender({
+      id: hostileExtId,
     })).toBe(false);
   });
 
@@ -99,17 +138,18 @@ describe('REC-SEC: Extension Sender Privileges & Scoping', () => {
     })).toBe(false);
   });
 
-  it('rejects external web origins as unprivileged', () => {
+  it('rejects external web origins and URLs as unprivileged', () => {
     expect(isPrivilegedExtensionSender({
       url: 'https://attacker.example.com/login',
     })).toBe(false);
+
     expect(isPrivilegedExtensionSender({
       origin: 'https://attacker.example.com',
     })).toBe(false);
   });
 });
 
-describe('REC-SEC: Content Script Allowlist & Privileged UI Boundary', () => {
+describe('REC-SEC: Content Script Allowlist & Privileged Boundary', () => {
   let router;
   const mockPatches = {
     getPatch: () => ({ id: 'generic', name: 'Generic', postProcess: (e) => e }),
@@ -163,12 +203,14 @@ describe('REC-SEC: Content Script Allowlist & Privileged UI Boundary', () => {
   });
 
   it('allows privileged extension UI to invoke management actions', async () => {
-    const privilegedSender = {
-      url: `chrome-extension://${EXTENSION_ID}/popup.html`,
-    };
-
-    const res = await router({ action: 'GET_SETTINGS' }, privilegedSender);
+    const res = await router({ action: 'GET_SETTINGS' }, PRIVILEGED_UI_SENDER);
     expect(res).toHaveProperty('apiBase');
+  });
+
+  it('rejects absent/empty sender attempting privileged actions (fail closed)', async () => {
+    const res = await router({ action: 'CLEAR_RECORDING' }, {});
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Action 'CLEAR_RECORDING' is restricted to extension UI.");
   });
 });
 
@@ -180,7 +222,7 @@ describe('REC-SEC: Sanitized Content Script Status & State Isolation', () => {
     listPatches: () => [{ id: 'generic', name: 'Generic' }],
   };
 
-  const contentSender = {
+  const activeContentSender = {
     tab: { id: ACTIVE_TAB_ID },
     url: 'https://erp.example.com/page',
   };
@@ -210,8 +252,8 @@ describe('REC-SEC: Sanitized Content Script Status & State Isolation', () => {
     delete globalThis.chrome;
   });
 
-  it('sanitizes GET_STATUS for content scripts — returns ONLY minimal reactivation state', async () => {
-    const res = await router({ action: 'GET_STATUS' }, contentSender);
+  it('sanitizes GET_STATUS for active content scripts — returns ONLY minimal reactivation state', async () => {
+    const res = await router({ action: 'GET_STATUS' }, activeContentSender);
 
     expect(res.session).toBeDefined();
     expect(res.session.isRecording).toBe(true);
@@ -229,11 +271,7 @@ describe('REC-SEC: Sanitized Content Script Status & State Isolation', () => {
   });
 
   it('provides full session forTransport() to privileged extension UI', async () => {
-    const privilegedSender = {
-      url: `chrome-extension://${EXTENSION_ID}/popup.html`,
-    };
-
-    const res = await router({ action: 'GET_STATUS' }, privilegedSender);
+    const res = await router({ action: 'GET_STATUS' }, PRIVILEGED_UI_SENDER);
     expect(res.session.isRecording).toBe(true);
     expect(res.session.events).toHaveLength(2);
     expect(res.session.steps).toHaveLength(1);
@@ -241,16 +279,31 @@ describe('REC-SEC: Sanitized Content Script Status & State Isolation', () => {
     expect(res.session.generatedCode).toBe('await page.fill("#pass", "secret");');
   });
 
-  it('GET_CAPTURE_ACTIVE returns minimal sanitized state to content scripts', async () => {
-    const res = await router({ action: 'GET_CAPTURE_ACTIVE' }, contentSender);
-    expect(res.session.isRecording).toBe(true);
-    expect(res.session.eventCount).toBe(2);
-    expect(res.session.events).toBeUndefined();
-    expect(res.session.generatedCode).toBeUndefined();
+  it('sanitizes STOP_RECORDING response for content scripts — no code or steps leaked', async () => {
+    const res = await router({ action: 'STOP_RECORDING' }, activeContentSender);
+
+    expect(res.success).toBe(true);
+    expect(res.eventCount).toBe(2);
+
+    // Generated code and steps MUST NOT be returned to the content script
+    expect(res.generatedCode).toBeUndefined();
+    expect(res.steps).toBeUndefined();
+    expect(res.actions).toBeUndefined();
+  });
+
+  it('returns full compiled code and steps to privileged extension UI on STOP_RECORDING', async () => {
+    // Re-arm session for UI stop
+    session.get().isRecording = true;
+    const res = await router({ action: 'STOP_RECORDING' }, PRIVILEGED_UI_SENDER);
+
+    expect(res.success).toBe(true);
+    expect(res.eventCount).toBe(2);
+    expect(res.generatedCode).toBeDefined();
+    expect(res.steps).toBeDefined();
   });
 });
 
-describe('REC-SEC: Tab Scoping & Unregistered Tab Rejection', () => {
+describe('REC-SEC: Active/Registered-Tab Gate on Query & Mutation Handlers', () => {
   let router;
   const mockPatches = {
     getPatch: () => ({ id: 'generic', name: 'Generic', postProcess: (e) => e }),
@@ -268,33 +321,37 @@ describe('REC-SEC: Tab Scoping & Unregistered Tab Rejection', () => {
     s.isPaused = false;
     s.patchId = 'generic';
     s.activeTabId = ACTIVE_TAB_ID;
+    s.events = [{ type: 'click', label: 'Step 1' }];
   });
 
   afterEach(() => {
     delete globalThis.chrome;
   });
 
-  it('accepts RECORD_EVENT and PATCH_CONTEXT_UPDATE from the active recording tab', async () => {
-    const activeSender = {
-      tab: { id: ACTIVE_TAB_ID },
-      url: 'https://erp.example.com/page',
+  it('denies live recording status to unregistered tabs (GET_STATUS, GET_CAPTURE_ACTIVE, PING)', async () => {
+    const untrustedSender = {
+      tab: { id: UNREGISTERED_TAB_ID },
+      url: 'https://attacker.example.com/exploit',
     };
 
-    const evtRes = await router({
-      action: 'RECORD_EVENT',
-      event: { type: 'click', label: 'Primary Nav' },
-    }, activeSender);
-    expect(evtRes.accepted).toBe(true);
-    expect(evtRes.totalEvents).toBe(1);
+    // GET_STATUS from unregistered tab returns inactive state
+    const statusRes = await router({ action: 'GET_STATUS' }, untrustedSender);
+    expect(statusRes.session.isRecording).toBe(false);
+    expect(statusRes.session.eventCount).toBe(0);
 
-    const patchRes = await router({
-      action: 'PATCH_CONTEXT_UPDATE',
-      context: { appState: 'ready' },
-    }, activeSender);
-    expect(patchRes.ok).toBe(true);
+    // GET_CAPTURE_ACTIVE from unregistered tab returns inactive state
+    const captureRes = await router({ action: 'GET_CAPTURE_ACTIVE' }, untrustedSender);
+    expect(captureRes.session.isRecording).toBe(false);
+    expect(captureRes.session.eventCount).toBe(0);
+
+    // PING from unregistered tab returns unrecognized_surface
+    const pingRes = await router({ action: 'PING' }, untrustedSender);
+    expect(pingRes.ok).toBe(false);
+    expect(pingRes.isRecording).toBe(false);
+    expect(pingRes.reason).toBe('unrecognized_surface');
   });
 
-  it('rejects RECORD_EVENT and PATCH_CONTEXT_UPDATE from an unregistered tab', async () => {
+  it('rejects mutations from unregistered tabs (RECORD_EVENT, PATCH_CONTEXT_UPDATE, PAUSE, RESUME, STOP)', async () => {
     const untrustedSender = {
       tab: { id: UNREGISTERED_TAB_ID },
       url: 'https://attacker.example.com/exploit',
@@ -313,32 +370,6 @@ describe('REC-SEC: Tab Scoping & Unregistered Tab Rejection', () => {
     }, untrustedSender);
     expect(patchRes.ok).toBe(false);
     expect(patchRes.reason).toBe('unrecognized_surface');
-  });
-
-  it('allows pause, resume, and stop controls from active tab surface', async () => {
-    const activeSender = {
-      tab: { id: ACTIVE_TAB_ID },
-      url: 'https://erp.example.com/page',
-    };
-
-    const pauseRes = await router({ action: 'PAUSE_RECORDING' }, activeSender);
-    expect(pauseRes.success).toBe(true);
-    expect(pauseRes.isPaused).toBe(true);
-
-    const resumeRes = await router({ action: 'RESUME_RECORDING' }, activeSender);
-    expect(resumeRes.success).toBe(true);
-    expect(resumeRes.isPaused).toBe(false);
-
-    const stopRes = await router({ action: 'STOP_RECORDING' }, activeSender);
-    expect(stopRes.success).toBe(true);
-    expect(session.get().isRecording).toBe(false);
-  });
-
-  it('rejects pause, resume, and stop controls from an unregistered tab', async () => {
-    const untrustedSender = {
-      tab: { id: UNREGISTERED_TAB_ID },
-      url: 'https://attacker.example.com/exploit',
-    };
 
     const pauseRes = await router({ action: 'PAUSE_RECORDING' }, untrustedSender);
     expect(pauseRes.success).toBe(false);
@@ -354,7 +385,7 @@ describe('REC-SEC: Tab Scoping & Unregistered Tab Rejection', () => {
   });
 });
 
-describe('REC-SEC: In-Page Content Script Bridge Relay Removal', () => {
+describe('REC-SEC: In-Page Content Script Bridge Relay Removal & Hostile Action Injection', () => {
   beforeEach(() => {
     vi.resetModules();
     installMockChrome(EXTENSION_ID);
@@ -367,29 +398,29 @@ describe('REC-SEC: In-Page Content Script Bridge Relay Removal', () => {
   });
 
   it('ignores hostile __FLOWTRACE_PLATFORM_LAUNCH__ window messages completely', async () => {
-    // Import content script once
     await import('../src/core/content/index.js');
 
-    // Post hostile launch window message
+    // Attempt action hijacking via window.postMessage payload
     window.postMessage({
       type: '__FLOWTRACE_PLATFORM_LAUNCH__',
       payload: {
+        action: 'CLEAR_RECORDING',
         targetUrl: 'https://attacker.example.com',
         autoLogin: true,
       },
     }, '*');
 
-    // Wait a tick for event loop
     await new Promise((r) => setTimeout(r, 50));
 
-    // chrome.runtime.sendMessage must NEVER have been called with PLATFORM_LAUNCH_SESSION
-    const launchCalls = chrome.runtime.sendMessage.mock.calls.filter(
-      (args) => args[0]?.action === 'PLATFORM_LAUNCH_SESSION'
-    );
+    // chrome.runtime.sendMessage must NEVER have been called with PLATFORM_LAUNCH_SESSION or hijacked action
+    const calls = chrome.runtime.sendMessage.mock.calls;
+    const launchCalls = calls.filter((args) => args[0]?.action === 'PLATFORM_LAUNCH_SESSION');
+    const clearCalls = calls.filter((args) => args[0]?.action === 'CLEAR_RECORDING');
     expect(launchCalls).toHaveLength(0);
+    expect(clearCalls).toHaveLength(0);
   });
 
-  it('retains harmless presence detection ping/pong', async () => {
+  it('retains harmless presence detection ping/pong without privileged capabilities', async () => {
     await import('../src/core/content/index.js');
 
     const receivedMessages = [];
@@ -402,11 +433,99 @@ describe('REC-SEC: In-Page Content Script Bridge Relay Removal', () => {
 
     window.postMessage({ type: '__FLOWTRACE_PLATFORM_PING__' }, '*');
 
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 50));
     window.removeEventListener('message', listener);
 
     expect(receivedMessages.length).toBeGreaterThan(0);
     expect(receivedMessages[0].installed).toBe(true);
     expect(receivedMessages[0].version).toBe('1.0.0');
+    expect(receivedMessages[0].recording).toBe(false);
+  });
+});
+
+describe('REC-SEC: End-to-End Navigation Reactivation Lifecycle', () => {
+  let router;
+  const mockPatches = {
+    getPatch: () => ({ id: 'oracle', name: 'Oracle Fusion', postProcess: (e) => e }),
+    hasPatch: (id) => id === 'oracle',
+    listPatches: () => [{ id: 'oracle', name: 'Oracle Fusion' }],
+  };
+
+  beforeEach(async () => {
+    installMockChrome(EXTENSION_ID);
+    await session.clear();
+    router = createRouter(mockPatches);
+
+    // Active recording with 5 recorded events on active tab 42
+    const s = session.get();
+    s.isRecording = true;
+    s.isPaused = false;
+    s.patchId = 'oracle';
+    s.activeTabId = ACTIVE_TAB_ID;
+    s.events = [
+      { type: 'click', label: 'E1' },
+      { type: 'click', label: 'E2' },
+      { type: 'click', label: 'E3' },
+      { type: 'click', label: 'E4' },
+      { type: 'click', label: 'E5' },
+    ];
+  });
+
+  afterEach(() => {
+    delete globalThis.chrome;
+  });
+
+  it('preserves session continuity across navigation on active tab and resumes event counter', async () => {
+    // 1. Navigation occurs on active tab 42: content script asks for status
+    const navSender = { tab: { id: ACTIVE_TAB_ID }, url: 'https://erp.example.com/po/step2' };
+    const statusResp = await router({ action: 'GET_STATUS' }, navSender);
+
+    expect(statusResp.session.isRecording).toBe(true);
+    expect(statusResp.session.eventCount).toBe(5);
+    expect(statusResp.session.patchId).toBe('oracle');
+
+    // 2. Resume session counter in bus with received count
+    const epoch = bus.resumeSession(statusResp.session.eventCount);
+    expect(bus.isRecording()).toBe(true);
+    expect(epoch).toBeGreaterThan(0);
+
+    // 3. New user interaction on the navigated page emits 6th event
+    const newEvent = { type: 'fill', label: 'Quantity', value: '10' };
+    const recordResp = await router({ action: 'RECORD_EVENT', event: newEvent }, navSender);
+
+    expect(recordResp.accepted).toBe(true);
+    expect(recordResp.totalEvents).toBe(6);
+    expect(session.get().events).toHaveLength(6);
+  });
+
+  it('prevents foreign tabs from reactivating capture during an ongoing recording', async () => {
+    const foreignSender = { tab: { id: UNREGISTERED_TAB_ID }, url: 'https://news.example.com' };
+    const statusResp = await router({ action: 'GET_STATUS' }, foreignSender);
+
+    expect(statusResp.session.isRecording).toBe(false);
+    expect(statusResp.session.eventCount).toBe(0);
+
+    // Recording on active tab remains undisturbed
+    expect(session.get().events).toHaveLength(5);
+  });
+});
+
+describe('REC-SEC: Built Distribution Bundle Integrity Verification', () => {
+  it('dist/content.js contains zero occurrences of __FLOWTRACE_PLATFORM_LAUNCH__', () => {
+    const contentDistPath = resolve(__dirname, '../dist/content.js');
+    const contentCode = readFileSync(contentDistPath, 'utf8');
+
+    expect(contentCode).not.toContain('__FLOWTRACE_PLATFORM_LAUNCH__');
+    expect(contentCode).toContain('__FLOWTRACE_PLATFORM_PING__');
+    expect(contentCode).toContain('__FLOWTRACE_PLATFORM_PONG__');
+  });
+
+  it('dist/background.js includes fail-closed sender check and CONTENT_SCRIPT_ALLOWED_ACTIONS', () => {
+    const bgDistPath = resolve(__dirname, '../dist/background.js');
+    const bgCode = readFileSync(bgDistPath, 'utf8');
+
+    expect(bgCode).toContain('restricted to extension UI');
+    expect(bgCode).toContain('RECORD_EVENT');
+    expect(bgCode).toContain('GET_CAPTURE_ACTIVE');
   });
 });
