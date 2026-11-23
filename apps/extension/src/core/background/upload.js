@@ -55,12 +55,25 @@ export async function listEnvironments() {
  *                    environmentRequired?: boolean, unauthenticated?: boolean}>}
  */
 export async function uploadRecording(msg) {
-  const token = await auth.bearerToken();
-  const destType = await getDestinationType();
+  const s = session.get();
+
+  // If this session was already saved via a scoped launch intent, return the preserved saved result
+  if (s.scopedSaveResult) {
+    return {
+      success: true,
+      recording: s.scopedSaveResult,
+      alreadySaved: true,
+    };
+  }
+
+  const uploadCtx = s.uploadContext;
+  const isScopedLaunch = Boolean(uploadCtx);
+  const destType = isScopedLaunch ? 'flowtrace' : await getDestinationType();
   const destination = createDestination(destType);
+  const token = isScopedLaunch ? null : await auth.bearerToken();
   const apiBase = await getApiBase();
 
-  const isPlatform = destType === 'platform' || destination.id === 'platform';
+  const isPlatform = !isScopedLaunch && (destType === 'platform' || destination.id === 'platform');
   if (isPlatform && !token) {
     return { success: false, error: 'Sign in before saving.', unauthenticated: true };
   }
@@ -78,7 +91,6 @@ export async function uploadRecording(msg) {
     };
   }
 
-  const s = session.get();
   if (!s.actions || s.actions.length === 0) {
     return { success: false, error: 'Nothing to save — stop a recording first.' };
   }
@@ -95,15 +107,36 @@ export async function uploadRecording(msg) {
     steps: s.steps,
   });
 
+  const targetApiBase = uploadCtx?.apiBase || apiBase;
+  const targetEnv = uploadCtx?.environmentId
+    ? { id: uploadCtx.environmentId, name: 'Bound Environment' }
+    : environment;
+
   const res = await destination.uploadRecording({
     envelope,
     name,
     description,
-    environment,
-    apiBase,
+    environment: targetEnv,
+    apiBase: targetApiBase,
     token,
+    uploadToken: uploadCtx?.uploadToken,
+    uploadEnvelope: uploadCtx?.signedUploadEnvelope,
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
+
+  if (res.success) {
+    if (isScopedLaunch) {
+      s.scopedSaveResult = {
+        id: res.recording?.id || (res.recording && res.recording.recording ? res.recording.recording.id : null),
+        environmentId: uploadCtx.environmentId,
+        intentId: uploadCtx.intentId,
+        savedAt: new Date().toISOString(),
+      };
+      await session.setCompletedLaunchIntentId(uploadCtx.intentId);
+      s.uploadContext = null;
+      await session.persist();
+    }
+  }
 
   if (res.unauthenticated) {
     await auth.signOut();

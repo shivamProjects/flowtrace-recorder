@@ -14,6 +14,7 @@ import { EffectCorrelator, LifecycleObservers } from './observers.js';
 
 const STORAGE_KEY = 'recorderSession';
 const PREFERENCE_KEY = 'preferredPatchId';
+const OUTCOME_STORAGE_KEY = 'lastLaunchOutcome';
 
 /** @returns {Object} a fresh session */
 export function blankSession(patchId = DEFAULT_PATCH_ID) {
@@ -38,7 +39,88 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
      * in postProcess. The core never inspects its contents — it only merges.
      */
     patchContext: {},
+    /**
+     * Scoped upload context bound to a FlowTrace LaunchIntent.
+     * Contains uploadToken, signedUploadEnvelope, environmentId, intentId, apiBase.
+     */
+    uploadContext: null,
+    /**
+     * Preserved completed scoped save result.
+     * Prevents duplicate uploads or downgrade to unscoped destinations upon repeat save.
+     */
+    scopedSaveResult: null,
   };
+}
+
+let launchReservationToken = null;
+let inFlightLaunchIntentId = null;
+let lastCompletedLaunchIntentId = null;
+let lastLaunchOutcome = null;
+
+export function acquireLaunchReservation(intentId = null) {
+  if (session.isRecording || launchReservationToken !== null) {
+    return null;
+  }
+  const token = Symbol('launch_reservation');
+  launchReservationToken = token;
+  inFlightLaunchIntentId = intentId;
+  if (intentId) {
+    lastLaunchOutcome = { intentId, status: 'in_flight' };
+  }
+  return token;
+}
+
+export function releaseLaunchReservation(token) {
+  if (token && launchReservationToken !== token) {
+    return;
+  }
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
+}
+
+export function isLaunchInProgress() {
+  return launchReservationToken !== null;
+}
+
+export function getActiveLaunchIntentId() {
+  return inFlightLaunchIntentId || session.uploadContext?.intentId || session.scopedSaveResult?.intentId || lastCompletedLaunchIntentId || null;
+}
+
+export async function setCompletedLaunchIntentId(intentId) {
+  lastCompletedLaunchIntentId = intentId;
+  if (intentId) {
+    await setLastLaunchOutcome({ intentId, status: 'completed' });
+  }
+}
+
+export async function setLastLaunchOutcome(outcome) {
+  lastLaunchOutcome = outcome ? { ...outcome } : null;
+  if (outcome?.intentId) {
+    lastCompletedLaunchIntentId = outcome.intentId;
+  }
+  if (typeof chrome !== 'undefined' && chrome.storage?.local?.set) {
+    try {
+      if (outcome) {
+        await chrome.storage.local.set({ [OUTCOME_STORAGE_KEY]: outcome });
+      } else {
+        await chrome.storage.local.remove(OUTCOME_STORAGE_KEY);
+      }
+    } catch (err) {
+      console.warn('[recorder] could not persist launch outcome:', err.message);
+    }
+  }
+}
+
+export function getLastLaunchOutcome() {
+  return lastLaunchOutcome ? { ...lastLaunchOutcome } : null;
+}
+
+export function resetForTesting() {
+  loaded = false;
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
+  lastCompletedLaunchIntentId = null;
+  lastLaunchOutcome = null;
 }
 
 let session = blankSession();
@@ -116,7 +198,13 @@ export async function ensureLoaded() {
   if (loaded) return;
   loaded = true;
   try {
-    const stored = await chrome.storage.local.get([STORAGE_KEY, PREFERENCE_KEY]);
+    const stored = await chrome.storage.local.get([STORAGE_KEY, PREFERENCE_KEY, OUTCOME_STORAGE_KEY]);
+    if (stored[OUTCOME_STORAGE_KEY]) {
+      lastLaunchOutcome = stored[OUTCOME_STORAGE_KEY];
+      if (lastLaunchOutcome?.intentId) {
+        lastCompletedLaunchIntentId = lastLaunchOutcome.intentId;
+      }
+    }
     if (stored[STORAGE_KEY]) {
       session = { ...blankSession(), ...stored[STORAGE_KEY] };
       session.patchContext = stored[STORAGE_KEY].patchContext || {};
@@ -204,6 +292,10 @@ export async function flush() {
 }
 
 export async function clear() {
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
+  lastCompletedLaunchIntentId = null;
+  lastLaunchOutcome = null;
   if (lifecycleObservers) {
     lifecycleObservers.stop();
   }

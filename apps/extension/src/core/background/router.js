@@ -18,6 +18,7 @@ import {
   compileActions,
   compileScript,
   compileSteps,
+  apiErrorMessage,
 } from '@flowtrace/recorder-core';
 import * as session from './session.js';
 import { listEnvironments, uploadRecording } from './upload.js';
@@ -218,13 +219,19 @@ export function createRouter(patches) {
     // boundary as `{}` — truthy in JavaScript, so a platform doing
     // `if (ping.authenticated)` was told TRUE for a signed-out user, every time.
     // Observed live against nitro before the fix: {"authenticated":{}}.
-    PING_EXTENSION: async () => ({
-      success: true,
-      installed: true,
-      version: '1.0.0',
-      authenticated: await auth.isAuthenticated(),
-      isRecording: session.get().isRecording,
-    }),
+    PING_EXTENSION: async () => {
+      const s = session.get();
+      return {
+        success: true,
+        installed: true,
+        version: '1.0.0',
+        authenticated: await auth.isAuthenticated(),
+        isRecording: s.isRecording,
+        isLaunchInProgress: session.isLaunchInProgress(),
+        activeIntentId: session.getActiveLaunchIntentId(),
+        lastLaunchOutcome: session.getLastLaunchOutcome(),
+      };
+    },
 
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
@@ -357,15 +364,23 @@ export function createExternalRouter(patches) {
   session.setBroadcastFunction(broadcast);
 
   const externalHandlers = {
-    PING_EXTENSION: async () => ({
-      success: true,
-      installed: true,
-      version: '1.0.0',
-      authenticated: await auth.isAuthenticated(),
-      isRecording: session.get().isRecording,
-    }),
+    PING_EXTENSION: async () => {
+      const s = session.get();
+      return {
+        success: true,
+        installed: true,
+        version: '1.0.0',
+        capabilities: ['launch_intent_v1'],
+        authenticated: await auth.isAuthenticated(),
+        isRecording: s.isRecording,
+        isLaunchInProgress: session.isLaunchInProgress(),
+        activeIntentId: session.getActiveLaunchIntentId(),
+        lastLaunchOutcome: session.getLastLaunchOutcome(),
+      };
+    },
     GET_STATUS: () => ({ session: session.forTransport() }),
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
+    FLOWTRACE_LAUNCH_INTENT: (msg, sender) => flowtraceLaunchIntent(msg, sender, patches),
   };
 
   return async function externalRoute(msg, sender) {
@@ -383,18 +398,7 @@ export function createExternalRouter(patches) {
 }
 
 
-async function startRecording(msg, patches) {
-  // THE GATE. It is here, in the service worker, and not in the popup, because
-  // the popup is a web page: anyone can open the worker's devtools console and
-  // post `{action:'START_RECORDING'}` directly, and any disabled button in the
-  // UI is irrelevant to that. This is the only code path into a recording — the
-  // content script is injected by the branch below and captures nothing until
-  // it is activated from here — so refusing at this line refuses everywhere.
-  //
-  // Deliberately a local token check rather than a call to the backend: the
-  // recorder has to start on a customer network that may not have a route to
-  // the server at that moment, and revalidation on popup open is what keeps the
-  // local answer honest.
+async function executeStartRecording(msg, patches) {
   if (!(await auth.isAuthenticated())) {
     return { success: false, error: 'Sign in before recording.', unauthenticated: true };
   }
@@ -414,10 +418,6 @@ async function startRecording(msg, patches) {
       error: 'Choose an environment before recording — recordings cannot be saved without one.',
       environmentRequired: true,
     };
-  }
-
-  if (session.get().isRecording) {
-    return { success: false, error: 'Recording already in progress.' };
   }
 
   const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : session.get().patchId;
@@ -452,140 +452,370 @@ async function startRecording(msg, patches) {
   return { success: true, environment, session: session.forTransport() };
 }
 
-async function platformLaunchSession(msg, patches) {
-  // 1. Sync token & user from Platform if provided
-  if (msg.token) {
-    try {
-      await auth.setSessionToken(msg.token, msg.user || null);
-    } catch (e) {
-      console.warn('[recorder] could not sync platform session token:', e.message);
-    }
+async function startRecording(msg, patches) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
   }
 
-  // 2. Set target environment in recorder settings
-  if (msg.environment) {
-    try {
-      await setEnvironment(msg.environment);
-    } catch (e) {
-      console.warn('[recorder] could not set environment from platform launch:', e.message);
-    }
+  const token = session.acquireLaunchReservation();
+  if (!token) {
+    return { success: false, error: 'Recording or launch already in progress.' };
   }
 
-  const targetUrl = msg.targetUrl || msg.instance?.baseUrl || msg.url;
-  if (!targetUrl) {
-    return { success: false, error: 'Target URL or Instance URL is required to launch recording.' };
-  }
-
-  const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : 'oracle';
-
-  // 3. Open new tab with target URL
-  let tab;
   try {
-    tab = await chrome.tabs.create({ url: targetUrl, active: true });
-  } catch (err) {
-    return { success: false, error: `Failed to open tab: ${err.message}` };
+    return await executeStartRecording(msg, patches);
+  } finally {
+    session.releaseLaunchReservation(token);
   }
-
-  if (!tab || !tab.id) {
-    return { success: false, error: 'Failed to create browser tab.' };
-  }
-
-  // 4. Wait for the initial page load
-  await waitForTabComplete(tab.id, 10_000);
-
-  // 5. Inject recorder content scripts into the page
-  await inject(tab.id);
-
-  // 6. Handle automated login if requested and credentials are provided
-  if (msg.autoLogin && msg.credentials && (msg.credentials.username || msg.credentials.password)) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'AUTO_FILL_LOGIN',
-        username: msg.credentials.username || '',
-        password: msg.credentials.password || '',
-        submit: msg.autoSubmit !== false,
-      });
-      // Allow the form submit navigation to initiate and complete
-      await new Promise((r) => setTimeout(r, 2000));
-      await waitForTabComplete(tab.id, 8_000);
-      await inject(tab.id);
-    } catch (e) {
-      console.warn('[recorder] auto-fill login injection notice:', e.message);
-    }
-  }
-
-  // 7. Handle deep link navigation if specified and different from initial landing
-  if (msg.deepLinkUrl && msg.deepLinkUrl !== targetUrl) {
-    try {
-      await chrome.tabs.update(tab.id, { url: msg.deepLinkUrl });
-      await waitForTabComplete(tab.id, 8_000);
-      await inject(tab.id);
-    } catch (e) {
-      console.warn('[recorder] deep link navigation notice:', e.message);
-    }
-  }
-
-  // Retrieve latest tab info
-  let currentTabUrl = targetUrl;
-  try {
-    const updatedTab = await chrome.tabs.get(tab.id);
-    if (updatedTab && updatedTab.url) currentTabUrl = updatedTab.url;
-  } catch (_) {}
-
-  // 8. Start recording session on the active tab
-  const startResult = await startRecording({
-    tabId: tab.id,
-    tabUrl: currentTabUrl,
-    patchId,
-  }, patches);
-
-  // SUCCESS IS DERIVED FROM startRecording, NOT ASSERTED.
-  //
-  // This used to return a hardcoded `success: true` with the real outcome buried
-  // in the sibling `startResult`. startRecording produces three well-shaped
-  // refusals — `unauthenticated` (:197), `environmentRequired` (:210) and
-  // "Recording already in progress." (:218) — and all three were discarded here.
-  //
-  // The environment one is a DATA-LOSS path, not a cosmetic lie: its own comment
-  // above says refusing at Start costs a click while refusing at Save costs the
-  // entire recording. A caller told `success: true` records the whole flow and
-  // loses it at save, which is precisely the failure the gate exists to prevent.
-  //
-  // The discriminators are propagated to the top level so the platform can say
-  // "sign in" or "choose an environment" rather than a generic "launch failed" —
-  // telling a user their launch failed when they only need to sign in is its own
-  // small lie. `startResult` is still returned whole for callers that want it.
-  const ok = startResult?.success === true;
-  return {
-    success: ok,
-    ...(ok ? {} : { error: startResult?.error || 'Recording did not start.' }),
-    ...(startResult?.unauthenticated ? { unauthenticated: true } : {}),
-    ...(startResult?.environmentRequired ? { environmentRequired: true } : {}),
-    tabId: tab.id,
-    targetUrl: currentTabUrl,
-    environment: await getEnvironment(),
-    startResult,
-  };
 }
 
-function waitForTabComplete(tabId, timeoutMs = 8000) {
-  return new Promise((resolve) => {
+async function platformLaunchSession(msg, patches) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
+  }
+
+  const token = session.acquireLaunchReservation();
+  if (!token) {
+    return { success: false, error: 'Recording or launch already in progress.' };
+  }
+
+  let tab = null;
+
+  try {
+    // 1. Sync token & user from Platform if provided
+    if (msg.token) {
+      try {
+        await auth.setSessionToken(msg.token, msg.user || null);
+      } catch (e) {
+        console.warn('[recorder] could not sync platform session token:', e.message);
+      }
+    }
+
+    // 2. Set target environment in recorder settings
+    if (msg.environment) {
+      try {
+        await setEnvironment(msg.environment);
+      } catch (e) {
+        console.warn('[recorder] could not set environment from platform launch:', e.message);
+      }
+    }
+
+    const targetUrl = msg.targetUrl || msg.instance?.baseUrl || msg.url;
+    if (!targetUrl) {
+      return { success: false, error: 'Target URL or Instance URL is required to launch recording.' };
+    }
+
+    const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : 'oracle';
+
+    // 3. Open new tab with target URL
+    try {
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    } catch (err) {
+      return { success: false, error: `Failed to open tab: ${err.message}` };
+    }
+
+    if (!tab || !tab.id) {
+      return { success: false, error: 'Failed to create browser tab.' };
+    }
+
+    // 4. Wait for the initial page load
+    await waitForTabComplete(tab.id, 10_000);
+
+    // 5. Inject recorder content scripts into the page
+    await inject(tab.id);
+
+    // 6. Handle automated login if requested and credentials are provided
+    if (msg.autoLogin && msg.credentials && (msg.credentials.username || msg.credentials.password)) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'AUTO_FILL_LOGIN',
+          username: msg.credentials.username || '',
+          password: msg.credentials.password || '',
+          submit: msg.autoSubmit !== false,
+        });
+        // Allow the form submit navigation to initiate and complete
+        await new Promise((r) => setTimeout(r, 2000));
+        await waitForTabComplete(tab.id, 8_000);
+        await inject(tab.id);
+      } catch (e) {
+        console.warn('[recorder] auto-fill login injection notice:', e.message);
+      }
+    }
+
+    // 7. Handle deep link navigation if specified and different from initial landing
+    if (msg.deepLinkUrl && msg.deepLinkUrl !== targetUrl) {
+      try {
+        await chrome.tabs.update(tab.id, { url: msg.deepLinkUrl });
+        await waitForTabComplete(tab.id, 8_000);
+        await inject(tab.id);
+      } catch (e) {
+        console.warn('[recorder] deep link navigation notice:', e.message);
+      }
+    }
+
+    // Retrieve latest tab info
+    let currentTabUrl = targetUrl;
+    try {
+      const updatedTab = await chrome.tabs.get(tab.id);
+      if (updatedTab && updatedTab.url) currentTabUrl = updatedTab.url;
+    } catch (_) {}
+
+    // 8. Start recording session on the active tab
+    const startResult = await executeStartRecording({
+      tabId: tab.id,
+      tabUrl: currentTabUrl,
+      patchId,
+    }, patches);
+
+    const ok = startResult?.success === true;
+    return {
+      success: ok,
+      ...(ok ? {} : { error: startResult?.error || 'Recording did not start.' }),
+      ...(startResult?.unauthenticated ? { unauthenticated: true } : {}),
+      ...(startResult?.environmentRequired ? { environmentRequired: true } : {}),
+      tabId: tab.id,
+      targetUrl: currentTabUrl,
+      environment: await getEnvironment(),
+      startResult,
+    };
+  } finally {
+    session.releaseLaunchReservation(token);
+  }
+}
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function flowtraceLaunchIntent(msg, sender, patches) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
+  }
+
+  const intentId = msg?.intentId;
+  const token = session.acquireLaunchReservation(intentId || null);
+  if (!token) {
+    return { success: false, error: 'Recording or launch already in progress.' };
+  }
+
+  let tab = null;
+
+  try {
+    const intentToken = msg?.token;
+    const signedEnvelope = msg?.signedEnvelope || msg?.envelope;
+
+    if (
+      !intentId ||
+      typeof intentId !== 'string' ||
+      !intentToken ||
+      typeof intentToken !== 'string' ||
+      !signedEnvelope ||
+      typeof signedEnvelope !== 'string'
+    ) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).' });
+      return {
+        success: false,
+        error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
+      };
+    }
+
+    // 2. Derive API base and enforce origin allowlist
+    const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
+    const targetOrigin = safeOriginOf(candidateBase);
+    if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Untrusted or invalid API base origin.' });
+      return { success: false, error: 'Untrusted or invalid API base origin.' };
+    }
+
+    // 3. Execute atomic claim with redirect: 'error'
+    const claimUrl = `${targetOrigin.replace(/\/+$/, '')}/api/v1/recorder/launch-intents/${encodeURIComponent(intentId)}/claim`;
+    let claimRes;
+    try {
+      claimRes = await fetch(claimUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: intentToken, signedEnvelope }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Could not reach FlowTrace server: ${err.message}` });
+      return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
+    }
+
+    const claimJson = await claimRes.json().catch(() => null);
+    if (!claimRes.ok) {
+      const errorMsg =
+        claimJson?.error?.message ||
+        apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: errorMsg });
+      return {
+        success: false,
+        error: errorMsg,
+        code: claimJson?.error?.code,
+        status: claimRes.status,
+      };
+    }
+
+    // 4. Complete validation of claim response before ANY side effects
+    const claimData = claimJson?.data || claimJson;
+
+    if (!claimData || typeof claimData !== 'object') {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Malformed claim response payload.' });
+      return { success: false, error: 'Malformed claim response payload.' };
+    }
+    if (claimData.intentId !== intentId) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response intent ID mismatch.' });
+      return { success: false, error: 'Claim response intent ID mismatch.' };
+    }
+    if (!claimData.environmentId || !UUID_REGEX.test(claimData.environmentId)) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid environment UUID.' });
+      return { success: false, error: 'Claim response missing valid environment UUID.' };
+    }
+    if (!claimData.uploadToken || typeof claimData.uploadToken !== 'string' || claimData.uploadToken.length < 16) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid uploadToken.' });
+      return { success: false, error: 'Claim response missing valid uploadToken.' };
+    }
+    if (!claimData.signedUploadEnvelope || typeof claimData.signedUploadEnvelope !== 'string' || claimData.signedUploadEnvelope.length < 16) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid signedUploadEnvelope.' });
+      return { success: false, error: 'Claim response missing valid signedUploadEnvelope.' };
+    }
+    const expiryTime = new Date(claimData.uploadExpiresAt).getTime();
+    if (isNaN(expiryTime) || expiryTime <= Date.now()) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response upload window is invalid or expired.' });
+      return { success: false, error: 'Claim response upload window is invalid or expired.' };
+    }
+
+    const targetUrl = claimData.targetUrl;
+    if (
+      !targetUrl ||
+      typeof targetUrl !== 'string' ||
+      (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
+    ) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Invalid target URL returned from claim.' });
+      return { success: false, error: 'Invalid target URL returned from claim.' };
+    }
+
+    const patchId = claimData.patchId || 'generic';
+    if (!patches?.hasPatch?.(patchId)) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Unsupported patch preset requested: '${patchId}'.` });
+      return { success: false, error: `Unsupported patch preset requested: '${patchId}'.` };
+    }
+
+    // 5. Open target browser tab
+    try {
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    } catch (err) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to open target tab: ${err.message}` });
+      return { success: false, error: `Failed to open target tab: ${err.message}` };
+    }
+
+    if (!tab || !tab.id) {
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Failed to create browser tab.' });
+      return { success: false, error: 'Failed to create browser tab.' };
+    }
+
+    const next = session.blankSession(patchId);
+    next.isRecording = true;
+    next.activeTabId = tab.id;
+    next.startedAt = Date.now();
+    next.sourceUrl = targetUrl;
+    next.uploadContext = {
+      intentId: claimData.intentId,
+      environmentId: claimData.environmentId,
+      uploadToken: claimData.uploadToken,
+      signedUploadEnvelope: claimData.signedUploadEnvelope,
+      uploadExpiresAt: claimData.uploadExpiresAt,
+      apiBase: targetOrigin,
+    };
+
+    const surfaceRegistry = session.getSurfaceRegistry();
+    surfaceRegistry.clear();
+    surfaceRegistry.setSessionId(next.recordingSessionId);
+    surfaceRegistry.registerPrimary(tab.id, { url: targetUrl });
+
+    session.initLifecycleObservers(inject, broadcast).start();
+
+    const navEvent = makeNavigateEvent(targetUrl);
+    navEvent.surfaceId = surfaceRegistry.getByTabId(tab.id)?.surfaceId;
+    next.events.push(navEvent);
+
+    session.set(next);
+    await session.persist();
+
+    // 6. Wait for tab load and inject scripts with deterministic failure cleanup
+    try {
+      await waitForTabComplete(tab.id, 10_000);
+      await injectStrict(tab.id);
+
+      // Verify content script activation acknowledgement
+      const ack = await chrome.tabs.sendMessage(tab.id, {
+        action: 'ACTIVATE_RECORDING',
+        patchId,
+      });
+      if (!ack || ack.ok !== true) {
+        throw new Error('Content script activation acknowledgement failed or was not received.');
+      }
+      await broadcastStrict(tab.id, '__flowtrace_activate__', { patchId });
+    } catch (activationErr) {
+      // Deterministic cleanup on failure: close opened tab, stop observers, and clear mutated session
+      if (tab?.id) {
+        await chrome.tabs.remove(tab.id).catch(() => {});
+      }
+      session.getLifecycleObservers()?.stop();
+      await session.clear();
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to activate recording in target tab: ${activationErr.message}` });
+      return {
+        success: false,
+        error: `Failed to activate recording in target tab: ${activationErr.message}`,
+      };
+    }
+
+    await session.setCompletedLaunchIntentId(claimData.intentId);
+    await session.setLastLaunchOutcome({ intentId: claimData.intentId, status: 'active' });
+
+    // 7. Minimal external launch acknowledgement (NO credential/recording transport leak)
+    return {
+      success: true,
+      intentId: claimData.intentId,
+      tabId: tab.id,
+      targetUrl,
+      environmentId: claimData.environmentId,
+    };
+  } finally {
+    session.releaseLaunchReservation(token);
+  }
+}
+
+async function waitForTabComplete(tabId, timeoutMs = 8000) {
+  try {
+    const existing = await chrome.tabs.get(tabId);
+    if (existing?.status === 'complete') {
+      return;
+    }
+  } catch {}
+
+  return new Promise((resolve, reject) => {
     let resolved = false;
+    let timer = null;
+
     const listener = (tid, info) => {
       if (tid === tabId && info.status === 'complete') {
         if (!resolved) {
           resolved = true;
+          clearTimeout(timer);
           chrome.tabs.onUpdated.removeListener(listener);
           resolve();
         }
       }
     };
+
     chrome.tabs.onUpdated.addListener(listener);
-    setTimeout(() => {
+
+    timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
+        reject(new Error(`Target tab failed to load within ${timeoutMs}ms.`));
       }
     }, timeoutMs);
   });
@@ -687,4 +917,21 @@ async function broadcast(tabId, eventName, detail) {
   } catch {
     // Tab may have navigated or closed; nothing to do.
   }
+}
+
+async function injectStrict(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ['selector-engine.js', 'content.js'],
+  });
+}
+
+async function broadcastStrict(tabId, eventName, detail) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: (name, payload) => {
+      window.dispatchEvent(new CustomEvent(name, { detail: payload }));
+    },
+    args: [eventName, detail || null],
+  });
 }
