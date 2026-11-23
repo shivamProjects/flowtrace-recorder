@@ -56,14 +56,24 @@ export async function listEnvironments() {
  */
 export async function uploadRecording(msg) {
   const s = session.get();
-  const uploadCtx = s.uploadContext;
 
-  const destType = uploadCtx ? 'flowtrace' : await getDestinationType();
+  // If this session was already saved via a scoped launch intent, return the preserved saved result
+  if (s.scopedSaveResult) {
+    return {
+      success: true,
+      recording: s.scopedSaveResult,
+      alreadySaved: true,
+    };
+  }
+
+  const uploadCtx = s.uploadContext;
+  const isScopedLaunch = Boolean(uploadCtx);
+  const destType = isScopedLaunch ? 'flowtrace' : await getDestinationType();
   const destination = createDestination(destType);
-  const token = await auth.bearerToken();
+  const token = isScopedLaunch ? null : await auth.bearerToken();
   const apiBase = await getApiBase();
 
-  const isPlatform = !uploadCtx && (destType === 'platform' || destination.id === 'platform');
+  const isPlatform = !isScopedLaunch && (destType === 'platform' || destination.id === 'platform');
   if (isPlatform && !token) {
     return { success: false, error: 'Sign in before saving.', unauthenticated: true };
   }
@@ -114,9 +124,16 @@ export async function uploadRecording(msg) {
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
 
-  if (res.success && s.uploadContext) {
-    s.uploadContext = null;
-    await session.persist();
+  if (res.success) {
+    if (isScopedLaunch) {
+      s.scopedSaveResult = {
+        id: res.recording?.id || (res.recording && res.recording.recording ? res.recording.recording.id : null),
+        environmentId: uploadCtx.environmentId,
+        savedAt: new Date().toISOString(),
+      };
+      s.uploadContext = null;
+      await session.persist();
+    }
   }
 
   if (res.unauthenticated) {

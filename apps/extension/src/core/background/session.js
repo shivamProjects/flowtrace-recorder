@@ -43,7 +43,30 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
      * Contains uploadToken, signedUploadEnvelope, environmentId, intentId, apiBase.
      */
     uploadContext: null,
+    /**
+     * Preserved completed scoped save result.
+     * Prevents duplicate uploads or downgrade to unscoped destinations upon repeat save.
+     */
+    scopedSaveResult: null,
   };
+}
+
+let launchInProgress = false;
+
+export function acquireLaunchReservation() {
+  if (launchInProgress || session.isRecording) {
+    return false;
+  }
+  launchInProgress = true;
+  return true;
+}
+
+export function releaseLaunchReservation() {
+  launchInProgress = false;
+}
+
+export function isLaunchInProgress() {
+  return launchInProgress;
 }
 
 let session = blankSession();
@@ -209,6 +232,7 @@ export async function flush() {
 }
 
 export async function clear() {
+  launchInProgress = false;
   if (lifecycleObservers) {
     lifecycleObservers.stop();
   }

@@ -159,6 +159,27 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
       expect(res.success).toBe(false);
       expect(res.error).toBe('Recording already in progress.');
     });
+
+    it('refuses launch if another launch reservation is held', async () => {
+      session.acquireLaunchReservation();
+      try {
+        const router = createExternalRouter(patches);
+        const res = await router(
+          {
+            action: 'FLOWTRACE_LAUNCH_INTENT',
+            intentId: '11111111-1111-4111-8111-111111111111',
+            token: 'raw-token',
+            signedEnvelope: 'signed-envelope',
+          },
+          VALID_EXTERNAL_SENDER,
+        );
+
+        expect(res.success).toBe(false);
+        expect(res.error).toBe('Recording or launch already in progress.');
+      } finally {
+        session.releaseLaunchReservation();
+      }
+    });
   });
 
   describe('FLOWTRACE_LAUNCH_INTENT Claim & Tab Activation', () => {

@@ -571,148 +571,212 @@ async function platformLaunchSession(msg, patches) {
   };
 }
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 async function flowtraceLaunchIntent(msg, sender, patches) {
-  if (session.get().isRecording) {
+  const s = session.get();
+  if (s.isRecording) {
     return { success: false, error: 'Recording already in progress.' };
   }
 
-  const intentId = msg?.intentId;
-  const token = msg?.token;
-  const signedEnvelope = msg?.signedEnvelope || msg?.envelope;
-
-  if (
-    !intentId ||
-    typeof intentId !== 'string' ||
-    !token ||
-    typeof token !== 'string' ||
-    !signedEnvelope ||
-    typeof signedEnvelope !== 'string'
-  ) {
-    return {
-      success: false,
-      error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
-    };
+  // 1. Single-flight launch reservation mutex
+  if (!session.acquireLaunchReservation()) {
+    return { success: false, error: 'Recording or launch already in progress.' };
   }
 
-  // Derive API base and enforce origin allowlist
-  const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
-  const targetOrigin = safeOriginOf(candidateBase);
-  if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
-    return { success: false, error: 'Untrusted or invalid API base origin.' };
-  }
+  let tab = null;
 
-  // Execute atomic claim against FlowTrace API
-  const claimUrl = `${targetOrigin.replace(/\/+$/, '')}/api/v1/recorder/launch-intents/${encodeURIComponent(intentId)}/claim`;
-  let claimRes;
   try {
-    claimRes = await fetch(claimUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, signedEnvelope }),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (err) {
-    return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
-  }
+    const intentId = msg?.intentId;
+    const token = msg?.token;
+    const signedEnvelope = msg?.signedEnvelope || msg?.envelope;
 
-  const claimJson = await claimRes.json().catch(() => null);
-  if (!claimRes.ok) {
-    const errorMsg =
-      claimJson?.error?.message ||
-      apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
-    return {
-      success: false,
-      error: errorMsg,
-      code: claimJson?.error?.code,
-      status: claimRes.status,
+    if (
+      !intentId ||
+      typeof intentId !== 'string' ||
+      !token ||
+      typeof token !== 'string' ||
+      !signedEnvelope ||
+      typeof signedEnvelope !== 'string'
+    ) {
+      return {
+        success: false,
+        error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
+      };
+    }
+
+    // 2. Derive API base and enforce origin allowlist
+    const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
+    const targetOrigin = safeOriginOf(candidateBase);
+    if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
+      return { success: false, error: 'Untrusted or invalid API base origin.' };
+    }
+
+    // 3. Execute atomic claim with redirect: 'error'
+    const claimUrl = `${targetOrigin.replace(/\/+$/, '')}/api/v1/recorder/launch-intents/${encodeURIComponent(intentId)}/claim`;
+    let claimRes;
+    try {
+      claimRes = await fetch(claimUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, signedEnvelope }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
+    }
+
+    const claimJson = await claimRes.json().catch(() => null);
+    if (!claimRes.ok) {
+      const errorMsg =
+        claimJson?.error?.message ||
+        apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
+      return {
+        success: false,
+        error: errorMsg,
+        code: claimJson?.error?.code,
+        status: claimRes.status,
+      };
+    }
+
+    // 4. Complete validation of claim response before ANY side effects
+    const claimData = claimJson?.data || claimJson;
+
+    if (!claimData || typeof claimData !== 'object') {
+      return { success: false, error: 'Malformed claim response payload.' };
+    }
+    if (claimData.intentId !== intentId) {
+      return { success: false, error: 'Claim response intent ID mismatch.' };
+    }
+    if (!claimData.environmentId || !UUID_REGEX.test(claimData.environmentId)) {
+      return { success: false, error: 'Claim response missing valid environment UUID.' };
+    }
+    if (!claimData.uploadToken || typeof claimData.uploadToken !== 'string' || claimData.uploadToken.length < 16) {
+      return { success: false, error: 'Claim response missing valid uploadToken.' };
+    }
+    if (!claimData.signedUploadEnvelope || typeof claimData.signedUploadEnvelope !== 'string' || claimData.signedUploadEnvelope.length < 16) {
+      return { success: false, error: 'Claim response missing valid signedUploadEnvelope.' };
+    }
+    const expiryTime = new Date(claimData.uploadExpiresAt).getTime();
+    if (isNaN(expiryTime) || expiryTime <= Date.now()) {
+      return { success: false, error: 'Claim response upload window is invalid or expired.' };
+    }
+
+    const targetUrl = claimData.targetUrl;
+    if (
+      !targetUrl ||
+      typeof targetUrl !== 'string' ||
+      (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
+    ) {
+      return { success: false, error: 'Invalid target URL returned from claim.' };
+    }
+
+    const patchId = claimData.patchId || 'generic';
+    if (!patches?.hasPatch?.(patchId)) {
+      return { success: false, error: `Unsupported patch preset requested: '${patchId}'.` };
+    }
+
+    // 5. Open target browser tab
+    try {
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    } catch (err) {
+      return { success: false, error: `Failed to open target tab: ${err.message}` };
+    }
+
+    if (!tab || !tab.id) {
+      return { success: false, error: 'Failed to create browser tab.' };
+    }
+
+    const next = session.blankSession(patchId);
+    next.isRecording = true;
+    next.activeTabId = tab.id;
+    next.startedAt = Date.now();
+    next.sourceUrl = targetUrl;
+    next.uploadContext = {
+      intentId: claimData.intentId,
+      environmentId: claimData.environmentId,
+      uploadToken: claimData.uploadToken,
+      signedUploadEnvelope: claimData.signedUploadEnvelope,
+      uploadExpiresAt: claimData.uploadExpiresAt,
+      apiBase: targetOrigin,
     };
+
+    const surfaceRegistry = session.getSurfaceRegistry();
+    surfaceRegistry.clear();
+    surfaceRegistry.setSessionId(next.recordingSessionId);
+    surfaceRegistry.registerPrimary(tab.id, { url: targetUrl });
+
+    session.initLifecycleObservers(inject, broadcast).start();
+
+    const navEvent = makeNavigateEvent(targetUrl);
+    navEvent.surfaceId = surfaceRegistry.getByTabId(tab.id)?.surfaceId;
+    next.events.push(navEvent);
+
+    session.set(next);
+    await session.persist();
+
+    // 6. Wait for tab load and inject scripts with deterministic failure cleanup
+    try {
+      await waitForTabComplete(tab.id, 10_000);
+      await inject(tab.id);
+      await broadcast(tab.id, '__flowtrace_activate__', { patchId });
+    } catch (activationErr) {
+      // Deterministic cleanup on failure: close opened tab and clear mutated session
+      if (tab?.id) {
+        await chrome.tabs.remove(tab.id).catch(() => {});
+      }
+      await session.clear();
+      return {
+        success: false,
+        error: `Failed to activate recording in target tab: ${activationErr.message}`,
+      };
+    }
+
+    // 7. Minimal external launch acknowledgement (NO credential/recording transport leak)
+    return {
+      success: true,
+      intentId: claimData.intentId,
+      tabId: tab.id,
+      targetUrl,
+      environmentId: claimData.environmentId,
+    };
+  } finally {
+    session.releaseLaunchReservation();
   }
-
-  const claimData = claimJson?.data || claimJson;
-  const targetUrl = claimData?.targetUrl;
-  if (
-    !targetUrl ||
-    typeof targetUrl !== 'string' ||
-    (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
-  ) {
-    return { success: false, error: 'Invalid target URL returned from claim.' };
-  }
-
-  const patchId = patches?.hasPatch?.(claimData.patchId) ? claimData.patchId : 'generic';
-
-  // Open target browser tab
-  let tab;
-  try {
-    tab = await chrome.tabs.create({ url: targetUrl, active: true });
-  } catch (err) {
-    return { success: false, error: `Failed to open target tab: ${err.message}` };
-  }
-
-  if (!tab || !tab.id) {
-    return { success: false, error: 'Failed to create browser tab.' };
-  }
-
-  const next = session.blankSession(patchId);
-  next.isRecording = true;
-  next.activeTabId = tab.id;
-  next.startedAt = Date.now();
-  next.sourceUrl = targetUrl;
-  next.uploadContext = {
-    intentId: claimData.intentId || intentId,
-    environmentId: claimData.environmentId || null,
-    uploadToken: claimData.uploadToken,
-    signedUploadEnvelope: claimData.signedUploadEnvelope,
-    uploadExpiresAt: claimData.uploadExpiresAt,
-    apiBase: targetOrigin,
-  };
-
-  const surfaceRegistry = session.getSurfaceRegistry();
-  surfaceRegistry.clear();
-  surfaceRegistry.setSessionId(next.recordingSessionId);
-  surfaceRegistry.registerPrimary(tab.id, { url: targetUrl });
-
-  session.initLifecycleObservers(inject, broadcast).start();
-
-  const navEvent = makeNavigateEvent(targetUrl);
-  navEvent.surfaceId = surfaceRegistry.getByTabId(tab.id)?.surfaceId;
-  next.events.push(navEvent);
-
-  session.set(next);
-  await session.persist();
-
-  // Wait for tab load and inject scripts
-  await waitForTabComplete(tab.id, 10_000);
-  await inject(tab.id);
-  await broadcast(tab.id, '__flowtrace_activate__', { patchId });
-
-  return {
-    success: true,
-    intentId: claimData.intentId || intentId,
-    tabId: tab.id,
-    targetUrl,
-    environmentId: claimData.environmentId || null,
-    session: session.forTransport(),
-  };
 }
 
-function waitForTabComplete(tabId, timeoutMs = 8000) {
-  return new Promise((resolve) => {
+async function waitForTabComplete(tabId, timeoutMs = 8000) {
+  try {
+    const existing = await chrome.tabs.get(tabId);
+    if (existing?.status === 'complete') {
+      return;
+    }
+  } catch {}
+
+  return new Promise((resolve, reject) => {
     let resolved = false;
+    let timer = null;
+
     const listener = (tid, info) => {
       if (tid === tabId && info.status === 'complete') {
         if (!resolved) {
           resolved = true;
+          clearTimeout(timer);
           chrome.tabs.onUpdated.removeListener(listener);
           resolve();
         }
       }
     };
+
     chrome.tabs.onUpdated.addListener(listener);
-    setTimeout(() => {
+
+    timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
+        reject(new Error(`Target tab failed to load within ${timeoutMs}ms.`));
       }
     }, timeoutMs);
   });

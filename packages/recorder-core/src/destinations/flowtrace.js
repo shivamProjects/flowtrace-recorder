@@ -203,6 +203,7 @@ export class FlowTraceDestination extends RecordingDestination {
         method: 'POST',
         headers,
         body: JSON.stringify(canonicalEnvelope),
+        redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
