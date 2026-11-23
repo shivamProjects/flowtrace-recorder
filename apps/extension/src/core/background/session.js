@@ -14,6 +14,7 @@ import { EffectCorrelator, LifecycleObservers } from './observers.js';
 
 const STORAGE_KEY = 'recorderSession';
 const PREFERENCE_KEY = 'preferredPatchId';
+const OUTCOME_STORAGE_KEY = 'lastLaunchOutcome';
 
 /** @returns {Object} a fresh session */
 export function blankSession(patchId = DEFAULT_PATCH_ID) {
@@ -85,19 +86,41 @@ export function getActiveLaunchIntentId() {
   return inFlightLaunchIntentId || session.uploadContext?.intentId || session.scopedSaveResult?.intentId || lastCompletedLaunchIntentId || null;
 }
 
-export function setCompletedLaunchIntentId(intentId) {
+export async function setCompletedLaunchIntentId(intentId) {
   lastCompletedLaunchIntentId = intentId;
   if (intentId) {
-    lastLaunchOutcome = { intentId, status: 'completed' };
+    await setLastLaunchOutcome({ intentId, status: 'completed' });
   }
 }
 
-export function setLastLaunchOutcome(outcome) {
-  lastLaunchOutcome = outcome;
+export async function setLastLaunchOutcome(outcome) {
+  lastLaunchOutcome = outcome ? { ...outcome } : null;
+  if (outcome?.intentId) {
+    lastCompletedLaunchIntentId = outcome.intentId;
+  }
+  if (typeof chrome !== 'undefined' && chrome.storage?.local?.set) {
+    try {
+      if (outcome) {
+        await chrome.storage.local.set({ [OUTCOME_STORAGE_KEY]: outcome });
+      } else {
+        await chrome.storage.local.remove(OUTCOME_STORAGE_KEY);
+      }
+    } catch (err) {
+      console.warn('[recorder] could not persist launch outcome:', err.message);
+    }
+  }
 }
 
 export function getLastLaunchOutcome() {
   return lastLaunchOutcome ? { ...lastLaunchOutcome } : null;
+}
+
+export function resetForTesting() {
+  loaded = false;
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
+  lastCompletedLaunchIntentId = null;
+  lastLaunchOutcome = null;
 }
 
 let session = blankSession();
@@ -175,7 +198,13 @@ export async function ensureLoaded() {
   if (loaded) return;
   loaded = true;
   try {
-    const stored = await chrome.storage.local.get([STORAGE_KEY, PREFERENCE_KEY]);
+    const stored = await chrome.storage.local.get([STORAGE_KEY, PREFERENCE_KEY, OUTCOME_STORAGE_KEY]);
+    if (stored[OUTCOME_STORAGE_KEY]) {
+      lastLaunchOutcome = stored[OUTCOME_STORAGE_KEY];
+      if (lastLaunchOutcome?.intentId) {
+        lastCompletedLaunchIntentId = lastLaunchOutcome.intentId;
+      }
+    }
     if (stored[STORAGE_KEY]) {
       session = { ...blankSession(), ...stored[STORAGE_KEY] };
       session.patchContext = stored[STORAGE_KEY].patchContext || {};

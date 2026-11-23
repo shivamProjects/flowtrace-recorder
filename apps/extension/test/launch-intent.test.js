@@ -371,6 +371,31 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
       expect(s.uploadContext).toBeNull();
       expect(session.isLaunchInProgress()).toBe(false);
       expect(chrome.tabs.remove).toHaveBeenCalled();
+
+      // Verify failure outcome is recorded
+      expect(session.getLastLaunchOutcome()).toEqual({
+        intentId: '66666666-6666-4666-8666-666666666666',
+        status: 'failed',
+        error: expect.stringMatching(/activation acknowledgement failed/i),
+      });
+
+      // Simulate MV3 service worker eviction / restart: reset in-memory module globals
+      session.resetForTesting();
+      expect(session.getLastLaunchOutcome()).toBeNull();
+
+      // Fresh router call (simulating browser reload / probe after worker wakeup)
+      const freshRouter = createExternalRouter(patches);
+      const pingAfterRestart = await freshRouter({ action: 'PING_EXTENSION' }, VALID_EXTERNAL_SENDER);
+
+      // Rehydrated terminal failure outcome and exact intentId must be preserved
+      expect(pingAfterRestart.activeIntentId).toBe('66666666-6666-4666-8666-666666666666');
+      expect(pingAfterRestart.lastLaunchOutcome).toEqual({
+        intentId: '66666666-6666-4666-8666-666666666666',
+        status: 'failed',
+        error: expect.stringMatching(/activation acknowledgement failed/i),
+      });
+      expect(pingAfterRestart.uploadToken).toBeUndefined();
+      expect(pingAfterRestart.signedUploadEnvelope).toBeUndefined();
     });
   });
 

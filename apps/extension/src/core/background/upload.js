@@ -132,7 +132,7 @@ export async function uploadRecording(msg) {
         intentId: uploadCtx.intentId,
         savedAt: new Date().toISOString(),
       };
-      session.setCompletedLaunchIntentId(uploadCtx.intentId);
+      await session.setCompletedLaunchIntentId(uploadCtx.intentId);
       s.uploadContext = null;
       await session.persist();
     }

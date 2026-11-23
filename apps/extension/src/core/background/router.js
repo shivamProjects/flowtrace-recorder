@@ -611,7 +611,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       !signedEnvelope ||
       typeof signedEnvelope !== 'string'
     ) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).' });
       return {
         success: false,
         error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
@@ -622,7 +622,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
     const targetOrigin = safeOriginOf(candidateBase);
     if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Untrusted or invalid API base origin.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Untrusted or invalid API base origin.' });
       return { success: false, error: 'Untrusted or invalid API base origin.' };
     }
 
@@ -638,7 +638,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Could not reach FlowTrace server: ${err.message}` });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Could not reach FlowTrace server: ${err.message}` });
       return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
     }
 
@@ -647,7 +647,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       const errorMsg =
         claimJson?.error?.message ||
         apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: errorMsg });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: errorMsg });
       return {
         success: false,
         error: errorMsg,
@@ -660,28 +660,28 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     const claimData = claimJson?.data || claimJson;
 
     if (!claimData || typeof claimData !== 'object') {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Malformed claim response payload.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Malformed claim response payload.' });
       return { success: false, error: 'Malformed claim response payload.' };
     }
     if (claimData.intentId !== intentId) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response intent ID mismatch.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response intent ID mismatch.' });
       return { success: false, error: 'Claim response intent ID mismatch.' };
     }
     if (!claimData.environmentId || !UUID_REGEX.test(claimData.environmentId)) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid environment UUID.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid environment UUID.' });
       return { success: false, error: 'Claim response missing valid environment UUID.' };
     }
     if (!claimData.uploadToken || typeof claimData.uploadToken !== 'string' || claimData.uploadToken.length < 16) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid uploadToken.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid uploadToken.' });
       return { success: false, error: 'Claim response missing valid uploadToken.' };
     }
     if (!claimData.signedUploadEnvelope || typeof claimData.signedUploadEnvelope !== 'string' || claimData.signedUploadEnvelope.length < 16) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid signedUploadEnvelope.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid signedUploadEnvelope.' });
       return { success: false, error: 'Claim response missing valid signedUploadEnvelope.' };
     }
     const expiryTime = new Date(claimData.uploadExpiresAt).getTime();
     if (isNaN(expiryTime) || expiryTime <= Date.now()) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response upload window is invalid or expired.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response upload window is invalid or expired.' });
       return { success: false, error: 'Claim response upload window is invalid or expired.' };
     }
 
@@ -691,13 +691,13 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       typeof targetUrl !== 'string' ||
       (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
     ) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Invalid target URL returned from claim.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Invalid target URL returned from claim.' });
       return { success: false, error: 'Invalid target URL returned from claim.' };
     }
 
     const patchId = claimData.patchId || 'generic';
     if (!patches?.hasPatch?.(patchId)) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Unsupported patch preset requested: '${patchId}'.` });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Unsupported patch preset requested: '${patchId}'.` });
       return { success: false, error: `Unsupported patch preset requested: '${patchId}'.` };
     }
 
@@ -705,12 +705,12 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     try {
       tab = await chrome.tabs.create({ url: targetUrl, active: true });
     } catch (err) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to open target tab: ${err.message}` });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to open target tab: ${err.message}` });
       return { success: false, error: `Failed to open target tab: ${err.message}` };
     }
 
     if (!tab || !tab.id) {
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Failed to create browser tab.' });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Failed to create browser tab.' });
       return { success: false, error: 'Failed to create browser tab.' };
     }
 
@@ -763,15 +763,15 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       }
       session.getLifecycleObservers()?.stop();
       await session.clear();
-      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to activate recording in target tab: ${activationErr.message}` });
+      await session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to activate recording in target tab: ${activationErr.message}` });
       return {
         success: false,
         error: `Failed to activate recording in target tab: ${activationErr.message}`,
       };
     }
 
-    session.setCompletedLaunchIntentId(claimData.intentId);
-    session.setLastLaunchOutcome({ intentId: claimData.intentId, status: 'active' });
+    await session.setCompletedLaunchIntentId(claimData.intentId);
+    await session.setLastLaunchOutcome({ intentId: claimData.intentId, status: 'active' });
 
     // 7. Minimal external launch acknowledgement (NO credential/recording transport leak)
     return {
