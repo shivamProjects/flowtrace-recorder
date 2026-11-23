@@ -51,31 +51,53 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
   };
 }
 
-let launchReservationHolder = null;
+let launchReservationToken = null;
+let inFlightLaunchIntentId = null;
+let lastCompletedLaunchIntentId = null;
+let lastLaunchOutcome = null;
 
-export function acquireLaunchReservation(holder = 'exclusive') {
-  if (session.isRecording) {
-    return false;
+export function acquireLaunchReservation(intentId = null) {
+  if (session.isRecording || launchReservationToken !== null) {
+    return null;
   }
-  if (launchReservationHolder !== null && launchReservationHolder !== holder) {
-    return false;
+  const token = Symbol('launch_reservation');
+  launchReservationToken = token;
+  inFlightLaunchIntentId = intentId;
+  if (intentId) {
+    lastLaunchOutcome = { intentId, status: 'in_flight' };
   }
-  launchReservationHolder = holder;
-  return true;
+  return token;
 }
 
-export function releaseLaunchReservation(holder = 'exclusive') {
-  if (launchReservationHolder === holder || holder === 'force') {
-    launchReservationHolder = null;
+export function releaseLaunchReservation(token) {
+  if (token && launchReservationToken !== token) {
+    return;
   }
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
 }
 
 export function isLaunchInProgress() {
-  return launchReservationHolder !== null;
+  return launchReservationToken !== null;
 }
 
-export function isLaunchInProgressFor(holder) {
-  return launchReservationHolder !== null && launchReservationHolder === holder;
+export function getActiveLaunchIntentId() {
+  return inFlightLaunchIntentId || session.uploadContext?.intentId || session.scopedSaveResult?.intentId || lastCompletedLaunchIntentId || null;
+}
+
+export function setCompletedLaunchIntentId(intentId) {
+  lastCompletedLaunchIntentId = intentId;
+  if (intentId) {
+    lastLaunchOutcome = { intentId, status: 'completed' };
+  }
+}
+
+export function setLastLaunchOutcome(outcome) {
+  lastLaunchOutcome = outcome;
+}
+
+export function getLastLaunchOutcome() {
+  return lastLaunchOutcome ? { ...lastLaunchOutcome } : null;
 }
 
 let session = blankSession();
@@ -241,7 +263,10 @@ export async function flush() {
 }
 
 export async function clear() {
-  launchReservationHolder = null;
+  launchReservationToken = null;
+  inFlightLaunchIntentId = null;
+  lastCompletedLaunchIntentId = null;
+  lastLaunchOutcome = null;
   if (lifecycleObservers) {
     lifecycleObservers.stop();
   }

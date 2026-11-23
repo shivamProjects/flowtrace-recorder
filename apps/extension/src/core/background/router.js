@@ -228,7 +228,8 @@ export function createRouter(patches) {
         authenticated: await auth.isAuthenticated(),
         isRecording: s.isRecording,
         isLaunchInProgress: session.isLaunchInProgress(),
-        activeIntentId: s.uploadContext?.intentId || s.scopedSaveResult?.intentId || null,
+        activeIntentId: session.getActiveLaunchIntentId(),
+        lastLaunchOutcome: session.getLastLaunchOutcome(),
       };
     },
 
@@ -373,7 +374,8 @@ export function createExternalRouter(patches) {
         authenticated: await auth.isAuthenticated(),
         isRecording: s.isRecording,
         isLaunchInProgress: session.isLaunchInProgress(),
-        activeIntentId: s.uploadContext?.intentId || s.scopedSaveResult?.intentId || null,
+        activeIntentId: session.getActiveLaunchIntentId(),
+        lastLaunchOutcome: session.getLastLaunchOutcome(),
       };
     },
     GET_STATUS: () => ({ session: session.forTransport() }),
@@ -396,20 +398,10 @@ export function createExternalRouter(patches) {
 }
 
 
-async function startRecording(msg, patches) {
-  const holder = msg?._reservationHolder;
-  const isSelfHolder = holder && session.isLaunchInProgressFor(holder);
-
-  if (!isSelfHolder) {
-    if (!session.acquireLaunchReservation('popup_start')) {
-      return { success: false, error: 'Recording or launch already in progress.' };
-    }
+async function executeStartRecording(msg, patches) {
+  if (!(await auth.isAuthenticated())) {
+    return { success: false, error: 'Sign in before recording.', unauthenticated: true };
   }
-
-  try {
-    if (!(await auth.isAuthenticated())) {
-      return { success: false, error: 'Sign in before recording.', unauthenticated: true };
-    }
 
   // THE SECOND GATE, and it is here for the same reason as the first: the popup
   // can be bypassed, so a disabled Start button is not a rule.
@@ -458,16 +450,32 @@ async function startRecording(msg, patches) {
   await broadcast(msg.tabId, '__flowtrace_activate__', { patchId });
 
   return { success: true, environment, session: session.forTransport() };
-} finally {
-  if (!isSelfHolder) {
-    session.releaseLaunchReservation('popup_start');
-  }
 }
+
+async function startRecording(msg, patches) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
+  }
+
+  const token = session.acquireLaunchReservation();
+  if (!token) {
+    return { success: false, error: 'Recording or launch already in progress.' };
+  }
+
+  try {
+    return await executeStartRecording(msg, patches);
+  } finally {
+    session.releaseLaunchReservation(token);
+  }
 }
 
 async function platformLaunchSession(msg, patches) {
-  const holder = 'platform_launch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  if (!session.acquireLaunchReservation(holder)) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
+  }
+
+  const token = session.acquireLaunchReservation();
+  if (!token) {
     return { success: false, error: 'Recording or launch already in progress.' };
   }
 
@@ -475,122 +483,104 @@ async function platformLaunchSession(msg, patches) {
 
   try {
     // 1. Sync token & user from Platform if provided
-  if (msg.token) {
-    try {
-      await auth.setSessionToken(msg.token, msg.user || null);
-    } catch (e) {
-      console.warn('[recorder] could not sync platform session token:', e.message);
+    if (msg.token) {
+      try {
+        await auth.setSessionToken(msg.token, msg.user || null);
+      } catch (e) {
+        console.warn('[recorder] could not sync platform session token:', e.message);
+      }
     }
-  }
 
-  // 2. Set target environment in recorder settings
-  if (msg.environment) {
-    try {
-      await setEnvironment(msg.environment);
-    } catch (e) {
-      console.warn('[recorder] could not set environment from platform launch:', e.message);
+    // 2. Set target environment in recorder settings
+    if (msg.environment) {
+      try {
+        await setEnvironment(msg.environment);
+      } catch (e) {
+        console.warn('[recorder] could not set environment from platform launch:', e.message);
+      }
     }
-  }
 
-  const targetUrl = msg.targetUrl || msg.instance?.baseUrl || msg.url;
-  if (!targetUrl) {
-    return { success: false, error: 'Target URL or Instance URL is required to launch recording.' };
-  }
-
-  const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : 'oracle';
-
-  // 3. Open new tab with target URL
-  let tab;
-  try {
-    tab = await chrome.tabs.create({ url: targetUrl, active: true });
-  } catch (err) {
-    return { success: false, error: `Failed to open tab: ${err.message}` };
-  }
-
-  if (!tab || !tab.id) {
-    return { success: false, error: 'Failed to create browser tab.' };
-  }
-
-  // 4. Wait for the initial page load
-  await waitForTabComplete(tab.id, 10_000);
-
-  // 5. Inject recorder content scripts into the page
-  await inject(tab.id);
-
-  // 6. Handle automated login if requested and credentials are provided
-  if (msg.autoLogin && msg.credentials && (msg.credentials.username || msg.credentials.password)) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'AUTO_FILL_LOGIN',
-        username: msg.credentials.username || '',
-        password: msg.credentials.password || '',
-        submit: msg.autoSubmit !== false,
-      });
-      // Allow the form submit navigation to initiate and complete
-      await new Promise((r) => setTimeout(r, 2000));
-      await waitForTabComplete(tab.id, 8_000);
-      await inject(tab.id);
-    } catch (e) {
-      console.warn('[recorder] auto-fill login injection notice:', e.message);
+    const targetUrl = msg.targetUrl || msg.instance?.baseUrl || msg.url;
+    if (!targetUrl) {
+      return { success: false, error: 'Target URL or Instance URL is required to launch recording.' };
     }
-  }
 
-  // 7. Handle deep link navigation if specified and different from initial landing
-  if (msg.deepLinkUrl && msg.deepLinkUrl !== targetUrl) {
+    const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : 'oracle';
+
+    // 3. Open new tab with target URL
     try {
-      await chrome.tabs.update(tab.id, { url: msg.deepLinkUrl });
-      await waitForTabComplete(tab.id, 8_000);
-      await inject(tab.id);
-    } catch (e) {
-      console.warn('[recorder] deep link navigation notice:', e.message);
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    } catch (err) {
+      return { success: false, error: `Failed to open tab: ${err.message}` };
     }
+
+    if (!tab || !tab.id) {
+      return { success: false, error: 'Failed to create browser tab.' };
+    }
+
+    // 4. Wait for the initial page load
+    await waitForTabComplete(tab.id, 10_000);
+
+    // 5. Inject recorder content scripts into the page
+    await inject(tab.id);
+
+    // 6. Handle automated login if requested and credentials are provided
+    if (msg.autoLogin && msg.credentials && (msg.credentials.username || msg.credentials.password)) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'AUTO_FILL_LOGIN',
+          username: msg.credentials.username || '',
+          password: msg.credentials.password || '',
+          submit: msg.autoSubmit !== false,
+        });
+        // Allow the form submit navigation to initiate and complete
+        await new Promise((r) => setTimeout(r, 2000));
+        await waitForTabComplete(tab.id, 8_000);
+        await inject(tab.id);
+      } catch (e) {
+        console.warn('[recorder] auto-fill login injection notice:', e.message);
+      }
+    }
+
+    // 7. Handle deep link navigation if specified and different from initial landing
+    if (msg.deepLinkUrl && msg.deepLinkUrl !== targetUrl) {
+      try {
+        await chrome.tabs.update(tab.id, { url: msg.deepLinkUrl });
+        await waitForTabComplete(tab.id, 8_000);
+        await inject(tab.id);
+      } catch (e) {
+        console.warn('[recorder] deep link navigation notice:', e.message);
+      }
+    }
+
+    // Retrieve latest tab info
+    let currentTabUrl = targetUrl;
+    try {
+      const updatedTab = await chrome.tabs.get(tab.id);
+      if (updatedTab && updatedTab.url) currentTabUrl = updatedTab.url;
+    } catch (_) {}
+
+    // 8. Start recording session on the active tab
+    const startResult = await executeStartRecording({
+      tabId: tab.id,
+      tabUrl: currentTabUrl,
+      patchId,
+    }, patches);
+
+    const ok = startResult?.success === true;
+    return {
+      success: ok,
+      ...(ok ? {} : { error: startResult?.error || 'Recording did not start.' }),
+      ...(startResult?.unauthenticated ? { unauthenticated: true } : {}),
+      ...(startResult?.environmentRequired ? { environmentRequired: true } : {}),
+      tabId: tab.id,
+      targetUrl: currentTabUrl,
+      environment: await getEnvironment(),
+      startResult,
+    };
+  } finally {
+    session.releaseLaunchReservation(token);
   }
-
-  // Retrieve latest tab info
-  let currentTabUrl = targetUrl;
-  try {
-    const updatedTab = await chrome.tabs.get(tab.id);
-    if (updatedTab && updatedTab.url) currentTabUrl = updatedTab.url;
-  } catch (_) {}
-
-  // 8. Start recording session on the active tab
-  const startResult = await startRecording({
-    tabId: tab.id,
-    tabUrl: currentTabUrl,
-    patchId,
-    _reservationHolder: holder,
-  }, patches);
-
-  // SUCCESS IS DERIVED FROM startRecording, NOT ASSERTED.
-  //
-  // This used to return a hardcoded `success: true` with the real outcome buried
-  // in the sibling `startResult`. startRecording produces three well-shaped
-  // refusals — `unauthenticated` (:197), `environmentRequired` (:210) and
-  // "Recording already in progress." (:218) — and all three were discarded here.
-  //
-  // The environment one is a DATA-LOSS path, not a cosmetic lie: its own comment
-  // above says refusing at Start costs a click while refusing at Save costs the
-  // entire recording. A caller told `success: true` records the whole flow and
-  // loses it at save, which is precisely the failure the gate exists to prevent.
-  //
-  // The discriminators are propagated to the top level so the platform can say
-  // "sign in" or "choose an environment" rather than a generic "launch failed" —
-  // telling a user their launch failed when they only need to sign in is its own
-  // small lie. `startResult` is still returned whole for callers that want it.
-  const ok = startResult?.success === true;
-  return {
-    success: ok,
-    ...(ok ? {} : { error: startResult?.error || 'Recording did not start.' }),
-    ...(startResult?.unauthenticated ? { unauthenticated: true } : {}),
-    ...(startResult?.environmentRequired ? { environmentRequired: true } : {}),
-    tabId: tab.id,
-    targetUrl: currentTabUrl,
-    environment: await getEnvironment(),
-    startResult,
-  };
-} finally {
-  session.releaseLaunchReservation(holder);
-}
 }
 
 const UUID_REGEX =
@@ -601,26 +591,27 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     return { success: false, error: 'Recording already in progress.' };
   }
 
-  const holder = 'flowtrace_launch_' + (msg?.intentId || Date.now());
-  if (!session.acquireLaunchReservation(holder)) {
+  const intentId = msg?.intentId;
+  const token = session.acquireLaunchReservation(intentId || null);
+  if (!token) {
     return { success: false, error: 'Recording or launch already in progress.' };
   }
 
   let tab = null;
 
   try {
-    const intentId = msg?.intentId;
-    const token = msg?.token;
+    const intentToken = msg?.token;
     const signedEnvelope = msg?.signedEnvelope || msg?.envelope;
 
     if (
       !intentId ||
       typeof intentId !== 'string' ||
-      !token ||
-      typeof token !== 'string' ||
+      !intentToken ||
+      typeof intentToken !== 'string' ||
       !signedEnvelope ||
       typeof signedEnvelope !== 'string'
     ) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).' });
       return {
         success: false,
         error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
@@ -631,6 +622,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
     const targetOrigin = safeOriginOf(candidateBase);
     if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Untrusted or invalid API base origin.' });
       return { success: false, error: 'Untrusted or invalid API base origin.' };
     }
 
@@ -641,11 +633,12 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       claimRes = await fetch(claimUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, signedEnvelope }),
+        body: JSON.stringify({ token: intentToken, signedEnvelope }),
         redirect: 'error',
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Could not reach FlowTrace server: ${err.message}` });
       return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
     }
 
@@ -654,6 +647,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       const errorMsg =
         claimJson?.error?.message ||
         apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: errorMsg });
       return {
         success: false,
         error: errorMsg,
@@ -666,22 +660,28 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     const claimData = claimJson?.data || claimJson;
 
     if (!claimData || typeof claimData !== 'object') {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Malformed claim response payload.' });
       return { success: false, error: 'Malformed claim response payload.' };
     }
     if (claimData.intentId !== intentId) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response intent ID mismatch.' });
       return { success: false, error: 'Claim response intent ID mismatch.' };
     }
     if (!claimData.environmentId || !UUID_REGEX.test(claimData.environmentId)) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid environment UUID.' });
       return { success: false, error: 'Claim response missing valid environment UUID.' };
     }
     if (!claimData.uploadToken || typeof claimData.uploadToken !== 'string' || claimData.uploadToken.length < 16) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid uploadToken.' });
       return { success: false, error: 'Claim response missing valid uploadToken.' };
     }
     if (!claimData.signedUploadEnvelope || typeof claimData.signedUploadEnvelope !== 'string' || claimData.signedUploadEnvelope.length < 16) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response missing valid signedUploadEnvelope.' });
       return { success: false, error: 'Claim response missing valid signedUploadEnvelope.' };
     }
     const expiryTime = new Date(claimData.uploadExpiresAt).getTime();
     if (isNaN(expiryTime) || expiryTime <= Date.now()) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Claim response upload window is invalid or expired.' });
       return { success: false, error: 'Claim response upload window is invalid or expired.' };
     }
 
@@ -691,11 +691,13 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       typeof targetUrl !== 'string' ||
       (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
     ) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Invalid target URL returned from claim.' });
       return { success: false, error: 'Invalid target URL returned from claim.' };
     }
 
     const patchId = claimData.patchId || 'generic';
     if (!patches?.hasPatch?.(patchId)) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Unsupported patch preset requested: '${patchId}'.` });
       return { success: false, error: `Unsupported patch preset requested: '${patchId}'.` };
     }
 
@@ -703,10 +705,12 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     try {
       tab = await chrome.tabs.create({ url: targetUrl, active: true });
     } catch (err) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to open target tab: ${err.message}` });
       return { success: false, error: `Failed to open target tab: ${err.message}` };
     }
 
     if (!tab || !tab.id) {
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: 'Failed to create browser tab.' });
       return { success: false, error: 'Failed to create browser tab.' };
     }
 
@@ -759,11 +763,15 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       }
       session.getLifecycleObservers()?.stop();
       await session.clear();
+      session.setLastLaunchOutcome({ intentId, status: 'failed', error: `Failed to activate recording in target tab: ${activationErr.message}` });
       return {
         success: false,
         error: `Failed to activate recording in target tab: ${activationErr.message}`,
       };
     }
+
+    session.setCompletedLaunchIntentId(claimData.intentId);
+    session.setLastLaunchOutcome({ intentId: claimData.intentId, status: 'active' });
 
     // 7. Minimal external launch acknowledgement (NO credential/recording transport leak)
     return {
@@ -774,7 +782,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       environmentId: claimData.environmentId,
     };
   } finally {
-    session.releaseLaunchReservation(holder);
+    session.releaseLaunchReservation(token);
   }
 }
 

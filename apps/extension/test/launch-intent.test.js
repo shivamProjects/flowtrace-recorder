@@ -380,7 +380,8 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
       const externalRouter = createExternalRouter(patches);
 
       // Acquire launch reservation (simulating in-flight intent claim / load)
-      expect(session.acquireLaunchReservation()).toBe(true);
+      const resToken = session.acquireLaunchReservation();
+      expect(Boolean(resToken)).toBe(true);
 
       try {
         // 1. Popup / internal START_RECORDING must be rejected
@@ -409,7 +410,7 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
 
         expect(pingRes.isLaunchInProgress).toBe(true);
       } finally {
-        session.releaseLaunchReservation();
+        session.releaseLaunchReservation(resToken);
       }
 
       // After release, isLaunchInProgress must be false
@@ -472,6 +473,153 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
 
       chrome.storage.local.set = originalSet;
     });
+
+    it('refuses same-path popup/popup concurrent start when first start is in-flight', async () => {
+      const internalRouter = createRouter(patches);
+
+      // Acquire reservation as if first popup start is processing
+      const firstToken = session.acquireLaunchReservation();
+      expect(Boolean(firstToken)).toBe(true);
+
+      try {
+        // Second popup start attempt
+        const secondRes = await internalRouter({
+          action: 'START_RECORDING',
+          tabId: 12,
+          tabUrl: 'https://example.com/second',
+        }, { url: `chrome-extension://${EXT_ID}/popup.html`, origin: `chrome-extension://${EXT_ID}` });
+
+        expect(secondRes.success).toBe(false);
+        expect(secondRes.error).toBe('Recording or launch already in progress.');
+      } finally {
+        session.releaseLaunchReservation(firstToken);
+      }
+    });
+
+    it('refuses same-path intent/intent concurrent launch and reflects in-flight claim ID in PING_EXTENSION', async () => {
+      const externalRouter = createExternalRouter(patches);
+
+      let releaseClaim;
+      const claimBlocker = new Promise((resolve) => {
+        releaseClaim = resolve;
+      });
+
+      const mockFetch = vi.fn(async (url) => {
+        if (url.includes('/claim')) {
+          await claimBlocker;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                intentId: '00000000-0000-4000-8000-000000000001',
+                environmentId: '00000000-0000-4000-8000-000000000002',
+                targetUrl: 'https://fusion.oracle.com/fscmUI/faces/FuseWelcome',
+                patchId: 'oracle',
+                uploadToken: 'mock-upload-token-min-16-chars',
+                signedUploadEnvelope: 'mock-signed-envelope-min-16-chars',
+                uploadExpiresAt: new Date(Date.now() + 60000).toISOString(),
+              },
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      });
+      globalThis.fetch = mockFetch;
+
+      // 1. Launch intent 1 (blocks at claim)
+      const intent1Promise = externalRouter({
+        action: 'FLOWTRACE_LAUNCH_INTENT',
+        intentId: '00000000-0000-4000-8000-000000000001',
+        token: 'token-1',
+        signedEnvelope: 'envelope-1',
+        apiBase: 'http://localhost:3200',
+      }, VALID_EXTERNAL_SENDER);
+
+      // Microtask tick to enter fetch
+      await new Promise((r) => setTimeout(r, 10));
+
+      // 2. PING_EXTENSION must report in-flight intent ID and reservation status
+      const pingDuringClaim = await externalRouter({ action: 'PING_EXTENSION' }, VALID_EXTERNAL_SENDER);
+      expect(pingDuringClaim.isLaunchInProgress).toBe(true);
+      expect(pingDuringClaim.activeIntentId).toBe('00000000-0000-4000-8000-000000000001');
+      expect(pingDuringClaim.lastLaunchOutcome).toEqual({
+        intentId: '00000000-0000-4000-8000-000000000001',
+        status: 'in_flight',
+      });
+
+      // 3. Competing second intent launch must be rejected immediately without calling fetch for intent 2
+      const intent2Res = await externalRouter({
+        action: 'FLOWTRACE_LAUNCH_INTENT',
+        intentId: '22222222-2222-4222-8222-222222222222',
+        token: 'token-2',
+        signedEnvelope: 'envelope-2',
+        apiBase: 'http://localhost:3200',
+      }, VALID_EXTERNAL_SENDER);
+
+      expect(intent2Res.success).toBe(false);
+      expect(intent2Res.error).toBe('Recording or launch already in progress.');
+      expect(mockFetch).toHaveBeenCalledTimes(1); // Only intent 1 fetched
+
+      // 4. Release claim for intent 1 and complete
+      releaseClaim();
+      const intent1Res = await intent1Promise;
+      expect(intent1Res.success).toBe(true);
+      expect(session.get().isRecording).toBe(true);
+      expect(session.getActiveLaunchIntentId()).toBe('00000000-0000-4000-8000-000000000001');
+    });
+
+    it('refuses cross-path legacy PLATFORM_LAUNCH_SESSION and START_RECORDING when FLOWTRACE_LAUNCH_INTENT is in-flight', async () => {
+      const internalRouter = createRouter(patches);
+      const externalRouter = createExternalRouter(patches);
+
+      let releaseClaim;
+      const claimBlocker = new Promise((resolve) => {
+        releaseClaim = resolve;
+      });
+
+      globalThis.fetch = vi.fn(async () => {
+        await claimBlocker;
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: { message: 'Internal Server Error' } }),
+        };
+      });
+
+      // Launch intent (blocked at claim)
+      const intentPromise = externalRouter({
+        action: 'FLOWTRACE_LAUNCH_INTENT',
+        intentId: '33333333-3333-4333-8333-333333333333',
+        token: 'token-3',
+        signedEnvelope: 'envelope-3',
+        apiBase: 'http://localhost:3200',
+      }, VALID_EXTERNAL_SENDER);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // 1. Internal popup start rejected
+      const popupRes = await internalRouter({
+        action: 'START_RECORDING',
+        tabId: 15,
+        tabUrl: 'https://example.com/popup',
+      }, { url: `chrome-extension://${EXT_ID}/popup.html`, origin: `chrome-extension://${EXT_ID}` });
+      expect(popupRes.success).toBe(false);
+      expect(popupRes.error).toBe('Recording or launch already in progress.');
+
+      // 2. External legacy platform launch rejected
+      const legacyRes = await externalRouter({
+        action: 'PLATFORM_LAUNCH_SESSION',
+        targetUrl: 'https://example.com/legacy',
+      }, VALID_EXTERNAL_SENDER);
+      expect(legacyRes.success).toBe(false);
+      expect(legacyRes.error).toBe('Recording or launch already in progress.');
+
+      // Release and cleanup
+      releaseClaim();
+      await intentPromise;
+    });
   });
 
   describe('Scoped Ingress Upload Wiring', () => {
@@ -514,8 +662,20 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
       expect(capturedHeaders['x-flowtrace-upload-envelope']).toBe('signed-upload-envelope-jwt');
       expect(capturedHeaders['x-flowtrace-upload-token']).toBe('secret-upload-token-abc');
 
-      // Upload context should be cleared following successful save
+      // Upload context should be cleared following successful save, but nonsecret completed intent ID retained
       expect(session.get().uploadContext).toBeNull();
+      expect(session.get().scopedSaveResult.intentId).toBe('intent-uuid-1');
+
+      // PING_EXTENSION must reflect completed intent ID and status without credential leakage
+      const externalRouter = createExternalRouter(patches);
+      const pingAfterSave = await externalRouter({ action: 'PING_EXTENSION' }, VALID_EXTERNAL_SENDER);
+      expect(pingAfterSave.activeIntentId).toBe('intent-uuid-1');
+      expect(pingAfterSave.lastLaunchOutcome).toEqual({
+        intentId: 'intent-uuid-1',
+        status: 'completed',
+      });
+      expect(pingAfterSave.uploadToken).toBeUndefined();
+      expect(pingAfterSave.signedUploadEnvelope).toBeUndefined();
     });
   });
 });
