@@ -243,10 +243,10 @@ export function createRouter(patches) {
         return { success: false, error: `Action '${action}' is restricted to extension UI.` };
       }
 
-      // Sender object must exist, be an object, and runtime ID must match
+      // Sender object must exist, be an object, and runtime ID must strictly match
       const currentExtId = (typeof chrome !== 'undefined' && chrome?.runtime?.id) ? chrome.runtime.id : null;
-      const isValidSender = sender && typeof sender === 'object' && currentExtId && (!sender.id || sender.id === currentExtId);
-      const hasValidTab = isValidSender && sender.tab && typeof sender.tab.id === 'number';
+      const isValidSender = Boolean(sender && typeof sender === 'object' && currentExtId && sender.id === currentExtId);
+      const hasValidTab = Boolean(isValidSender && sender.tab && Number.isInteger(sender.tab.id) && sender.tab.id > 0);
 
       const s = session.get();
       const surfaceRegistry = session.getSurfaceRegistry();

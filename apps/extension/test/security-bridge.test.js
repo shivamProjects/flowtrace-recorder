@@ -45,15 +45,29 @@ const AUTHORIZED_ACTIVE_TAB_SENDER = {
 
 function installMockChrome(extId = EXTENSION_ID) {
   const store = {};
+  const messageListeners = [];
+  const externalListeners = [];
   globalThis.chrome = {
     runtime: {
       id: extId,
       lastError: null,
       sendMessage: vi.fn(),
       onMessage: {
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
+        addListener: vi.fn((fn) => messageListeners.push(fn)),
+        removeListener: vi.fn((fn) => {
+          const idx = messageListeners.indexOf(fn);
+          if (idx >= 0) messageListeners.splice(idx, 1);
+        }),
       },
+      onMessageExternal: {
+        addListener: vi.fn((fn) => externalListeners.push(fn)),
+        removeListener: vi.fn((fn) => {
+          const idx = externalListeners.indexOf(fn);
+          if (idx >= 0) externalListeners.splice(idx, 1);
+        }),
+      },
+      onStartup: { addListener: vi.fn() },
+      onInstalled: { addListener: vi.fn() },
     },
     storage: {
       local: {
@@ -73,7 +87,7 @@ function installMockChrome(extId = EXTENSION_ID) {
       get: async (id) => ({ id, url: 'https://erp.example.com/app', status: 'complete' }),
     },
   };
-  return store;
+  return { store, messageListeners, externalListeners };
 }
 
 describe('REC-SEC: Fail-Closed Extension Sender Authorization', () => {
@@ -370,12 +384,18 @@ describe('REC-SEC: Comprehensive Sender Matrix Fail-Closed Enforcement', () => {
     { label: 'undefined', sender: undefined },
     { label: 'null', sender: null },
     { label: 'empty object {}', sender: {} },
+    { label: 'missing extension ID with active tab', sender: { tab: { id: ACTIVE_TAB_ID } } },
+    { label: 'empty extension ID with active tab', sender: { id: '', tab: { id: ACTIVE_TAB_ID } } },
     { label: 'foreign extension ID', sender: { id: 'foreignidforeignidforeignidfore' } },
+    { label: 'foreign extension ID with active tab', sender: { id: 'foreignidforeignidforeignidfore', tab: { id: ACTIVE_TAB_ID } } },
     { label: 'external web URL', sender: { url: 'https://attacker.example.com' } },
     { label: 'external origin', sender: { origin: 'https://attacker.example.com' } },
     { label: 'null tab', sender: { id: EXTENSION_ID, tab: null } },
     { label: 'empty tab {}', sender: { id: EXTENSION_ID, tab: {} } },
     { label: 'non-numeric tab id', sender: { id: EXTENSION_ID, tab: { id: '42' } } },
+    { label: 'negative tab id', sender: { id: EXTENSION_ID, tab: { id: -1 } } },
+    { label: 'zero tab id', sender: { id: EXTENSION_ID, tab: { id: 0 } } },
+    { label: 'floating point tab id', sender: { id: EXTENSION_ID, tab: { id: 42.5 } } },
     { label: 'unregistered tab 999', sender: { id: EXTENSION_ID, tab: { id: UNREGISTERED_TAB_ID } } },
   ];
 
@@ -574,13 +594,99 @@ describe('REC-SEC: Behavioral Built-Bundle Verification (dist/content.js & dist/
     expect(contentCode).toContain('__FLOWTRACE_PLATFORM_PONG__');
   });
 
-  it('dist/background.js static audit: includes fail-closed sender check and allowlist', () => {
+  it('dist/background.js executed behaviorally registers onMessage and enforces fail-closed sender checks', async () => {
+    const { messageListeners } = installMockChrome(EXTENSION_ID);
+
     const bgDistPath = resolve(__dirname, '../dist/background.js');
     const bgCode = readFileSync(bgDistPath, 'utf8');
 
-    expect(bgCode).toContain('restricted to extension UI');
-    expect(bgCode).toContain('RECORD_EVENT');
-    expect(bgCode).toContain('GET_CAPTURE_ACTIVE');
+    // Execute built background service worker bundle
+    new Function(bgCode)();
+    expect(messageListeners.length).toBeGreaterThan(0);
+
+    const onMessage = messageListeners[0];
+    const dispatch = (msg, sender) => new Promise((res) => onMessage(msg, sender, res));
+
+    // 1. Missing extension ID with active tab is rejected
+    const missingIdResp = await dispatch({ action: 'PAUSE_RECORDING' }, { tab: { id: ACTIVE_TAB_ID } });
+    expect(missingIdResp.success).toBe(false);
+
+    // 2. Empty string extension ID with active tab is rejected
+    const emptyIdResp = await dispatch({ action: 'PAUSE_RECORDING' }, { id: '', tab: { id: ACTIVE_TAB_ID } });
+    expect(emptyIdResp.success).toBe(false);
+
+    // 3. Negative tab ID is rejected
+    const negTabResp = await dispatch(
+      { action: 'RECORD_EVENT', event: { type: 'click' } },
+      { id: EXTENSION_ID, tab: { id: -1 } },
+    );
+    expect(negTabResp.accepted).toBe(false);
+
+    // 4. Content script restricted action rejected
+    const restrictedResp = await dispatch(
+      { action: 'GET_SETTINGS' },
+      { id: EXTENSION_ID, tab: { id: ACTIVE_TAB_ID } },
+    );
+    expect(restrictedResp.success).toBe(false);
+    expect(restrictedResp.error).toBe("Action 'GET_SETTINGS' is restricted to extension UI.");
+
+    // 5. Privileged extension UI sender authorized
+    const uiResp = await dispatch({ action: 'GET_SETTINGS' }, PRIVILEGED_UI_SENDER);
+    expect(uiResp).toHaveProperty('apiBase');
+  });
+
+  it('dist/content.js and dist/background.js wired behaviorally: bridge enforces security boundaries end-to-end', async () => {
+    const { messageListeners } = installMockChrome(EXTENSION_ID);
+    window.__flowtraceRecorderLoaded = false;
+
+    // Execute built background service worker
+    const bgDistPath = resolve(__dirname, '../dist/background.js');
+    new Function(readFileSync(bgDistPath, 'utf8'))();
+    const onMessage = messageListeners[0];
+
+    // Wire content script chrome.runtime.sendMessage to background listener
+    chrome.runtime.sendMessage = vi.fn((msg, callback) => {
+      const sender = {
+        id: EXTENSION_ID,
+        tab: { id: ACTIVE_TAB_ID },
+        url: window.location.href,
+      };
+      if (typeof callback === 'function') {
+        onMessage(msg, sender, callback);
+      } else {
+        return new Promise((resolve) => onMessage(msg, sender, resolve));
+      }
+    });
+
+    // Execute built content script bundle in JSDOM
+    const contentDistPath = resolve(__dirname, '../dist/content.js');
+    new Function(readFileSync(contentDistPath, 'utf8'))();
+
+    // 1. Presence ping/pong functions end-to-end
+    const pongPromise = new Promise((resolve) => {
+      const handler = (e) => {
+        if (e.data?.type === '__FLOWTRACE_PLATFORM_PONG__') {
+          window.removeEventListener('message', handler);
+          resolve(e.data);
+        }
+      };
+      window.addEventListener('message', handler);
+    });
+    window.postMessage({ type: '__FLOWTRACE_PLATFORM_PING__' }, '*');
+    const pong = await pongPromise;
+    expect(pong.installed).toBe(true);
+
+    // 2. Hostile page launch relay is dead: dispatching __FLOWTRACE_PLATFORM_LAUNCH__ does not invoke background launch
+    window.postMessage({
+      type: '__FLOWTRACE_PLATFORM_LAUNCH__',
+      payload: { action: 'START_RECORDING', targetUrl: 'https://attacker.example.com' },
+    }, '*');
+
+    await new Promise((r) => setTimeout(r, 50));
+    const startCalls = chrome.runtime.sendMessage.mock.calls.filter(
+      (c) => c[0]?.action === 'START_RECORDING' || c[0]?.action === 'PLATFORM_LAUNCH_SESSION',
+    );
+    expect(startCalls).toHaveLength(0);
   });
 });
 

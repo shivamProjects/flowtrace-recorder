@@ -48,6 +48,7 @@ const ENVIRONMENT = {
 
 const EXT_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
 const UI_SENDER = { url: `chrome-extension://${EXT_ID}/popup.html`, id: EXT_ID };
+const CONTENT_SENDER = { id: EXT_ID, tab: { id: 7 } };
 
 function installChrome() {
   store = {};
@@ -139,7 +140,7 @@ describe('no captured interaction is lost to a worker eviction', () => {
   it('persists a single event — the worst case under the old batching', async () => {
     await startRecording();
 
-    await route({ action: 'RECORD_EVENT', event: clickEvent(1) }, { tab: { id: 7 } });
+    await route({ action: 'RECORD_EVENT', event: clickEvent(1) }, CONTENT_SENDER);
     // The coalescing window has to elapse. Under the old `% 5` rule this event
     // was never written at all, so no amount of waiting would have saved it.
     await session.flush();
@@ -156,7 +157,7 @@ describe('no captured interaction is lost to a worker eviction', () => {
 
     // Four is the exact worst case: the old rule wrote at 5, so 1-4 were lost.
     for (let i = 1; i <= 4; i++) {
-      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, { tab: { id: 7 } });
+      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, CONTENT_SENDER);
     }
     await session.flush();
 
@@ -167,7 +168,7 @@ describe('no captured interaction is lost to a worker eviction', () => {
   it('survives a simulated eviction with every event intact', async () => {
     await startRecording();
     for (let i = 1; i <= 7; i++) {
-      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, { tab: { id: 7 } });
+      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, CONTENT_SENDER);
     }
     await session.flush();
 
@@ -195,7 +196,7 @@ describe('no captured interaction is lost to a worker eviction', () => {
     globalThis.chrome.storage.local.set = async (items) => { writes++; return realSet(items); };
 
     for (let i = 1; i <= 10; i++) {
-      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, { tab: { id: 7 } });
+      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, CONTENT_SENDER);
     }
     await session.flush();
 
@@ -208,7 +209,7 @@ describe('no captured interaction is lost to a worker eviction', () => {
   it('stopping a recording persists everything captured', async () => {
     await startRecording();
     for (let i = 1; i <= 3; i++) {
-      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, { tab: { id: 7 } });
+      await route({ action: 'RECORD_EVENT', event: clickEvent(i) }, CONTENT_SENDER);
     }
 
     // Before stop: an eviction here is the case that matters, because

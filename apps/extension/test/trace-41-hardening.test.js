@@ -197,7 +197,7 @@ describe('TRACE-41: Zero-CDP Transport Hardening', () => {
     const recordResult = await router({
       action: 'RECORD_EVENT',
       event: clickEvent,
-    }, { tab: { id: 50 } });
+    }, { id: 'ijbehkijmihjnhbmbdmoglbbajbkadbd', tab: { id: 50 } });
 
     expect(recordResult.accepted).toBe(true);
     expect(s.events).toHaveLength(1);
