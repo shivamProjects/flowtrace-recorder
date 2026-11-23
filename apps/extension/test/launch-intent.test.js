@@ -415,6 +415,63 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
       // After release, isLaunchInProgress must be false
       expect(session.isLaunchInProgress()).toBe(false);
     });
+
+    it('proves inverse-order race protection: when legacy PLATFORM_LAUNCH_SESSION is delayed at storage, competing FLOWTRACE_LAUNCH_INTENT is rejected and never claims or creates tab', async () => {
+      const externalRouter = createExternalRouter(patches);
+
+      let releaseStorage;
+      const storageBlocker = new Promise((resolve) => {
+        releaseStorage = resolve;
+      });
+
+      // Intercept chrome.storage.local.set to delay completion
+      const originalSet = chrome.storage.local.set;
+      chrome.storage.local.set = vi.fn(async (items) => {
+        await storageBlocker;
+        return originalSet(items);
+      });
+
+      const mockFetch = vi.fn();
+      globalThis.fetch = mockFetch;
+
+      // 1. Initiate legacy PLATFORM_LAUNCH_SESSION (will block at storage.local.set)
+      const legacyPromise = externalRouter(
+        {
+          action: 'PLATFORM_LAUNCH_SESSION',
+          targetUrl: 'https://example.com/legacy',
+          environment: { id: '00000000-0000-4000-8000-000000000002', name: 'ERP Dev1' },
+        },
+        VALID_EXTERNAL_SENDER,
+      );
+
+      // Give microtasks a turn to enter platformLaunchSession and reach storage
+      await new Promise((r) => setTimeout(r, 10));
+
+      // 2. Verify reservation is held immediately before storage finishes
+      expect(session.isLaunchInProgress()).toBe(true);
+
+      // 3. Competing FLOWTRACE_LAUNCH_INTENT arrives during the in-flight legacy setup
+      const competingRes = await externalRouter(
+        {
+          action: 'FLOWTRACE_LAUNCH_INTENT',
+          intentId: '99999999-9999-4999-8999-999999999999',
+          token: 'token',
+          signedEnvelope: 'envelope',
+          apiBase: 'http://localhost:3200',
+        },
+        VALID_EXTERNAL_SENDER,
+      );
+
+      expect(competingRes.success).toBe(false);
+      expect(competingRes.error).toBe('Recording or launch already in progress.');
+      expect(mockFetch).not.toHaveBeenCalled(); // Competing intent never claims from backend
+
+      // 4. Release storage to let legacy finish or fail
+      releaseStorage();
+      await legacyPromise.catch(() => {});
+
+      chrome.storage.local.set = originalSet;
+    });
   });
 
   describe('Scoped Ingress Upload Wiring', () => {

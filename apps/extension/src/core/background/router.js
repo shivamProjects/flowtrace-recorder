@@ -219,14 +219,18 @@ export function createRouter(patches) {
     // boundary as `{}` — truthy in JavaScript, so a platform doing
     // `if (ping.authenticated)` was told TRUE for a signed-out user, every time.
     // Observed live against nitro before the fix: {"authenticated":{}}.
-    PING_EXTENSION: async () => ({
-      success: true,
-      installed: true,
-      version: '1.0.0',
-      authenticated: await auth.isAuthenticated(),
-      isRecording: session.get().isRecording,
-      isLaunchInProgress: session.isLaunchInProgress(),
-    }),
+    PING_EXTENSION: async () => {
+      const s = session.get();
+      return {
+        success: true,
+        installed: true,
+        version: '1.0.0',
+        authenticated: await auth.isAuthenticated(),
+        isRecording: s.isRecording,
+        isLaunchInProgress: session.isLaunchInProgress(),
+        activeIntentId: s.uploadContext?.intentId || s.scopedSaveResult?.intentId || null,
+      };
+    },
 
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
   };
@@ -359,15 +363,19 @@ export function createExternalRouter(patches) {
   session.setBroadcastFunction(broadcast);
 
   const externalHandlers = {
-    PING_EXTENSION: async () => ({
-      success: true,
-      installed: true,
-      version: '1.0.0',
-      capabilities: ['launch_intent_v1'],
-      authenticated: await auth.isAuthenticated(),
-      isRecording: session.get().isRecording,
-      isLaunchInProgress: session.isLaunchInProgress(),
-    }),
+    PING_EXTENSION: async () => {
+      const s = session.get();
+      return {
+        success: true,
+        installed: true,
+        version: '1.0.0',
+        capabilities: ['launch_intent_v1'],
+        authenticated: await auth.isAuthenticated(),
+        isRecording: s.isRecording,
+        isLaunchInProgress: session.isLaunchInProgress(),
+        activeIntentId: s.uploadContext?.intentId || s.scopedSaveResult?.intentId || null,
+      };
+    },
     GET_STATUS: () => ({ session: session.forTransport() }),
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
     FLOWTRACE_LAUNCH_INTENT: (msg, sender) => flowtraceLaunchIntent(msg, sender, patches),
@@ -389,24 +397,19 @@ export function createExternalRouter(patches) {
 
 
 async function startRecording(msg, patches) {
-  if (session.get().isRecording || session.isLaunchInProgress()) {
-    return { success: false, error: 'Recording or launch already in progress.' };
+  const holder = msg?._reservationHolder;
+  const isSelfHolder = holder && session.isLaunchInProgressFor(holder);
+
+  if (!isSelfHolder) {
+    if (!session.acquireLaunchReservation('popup_start')) {
+      return { success: false, error: 'Recording or launch already in progress.' };
+    }
   }
 
-  // THE GATE. It is here, in the service worker, and not in the popup, because
-  // the popup is a web page: anyone can open the worker's devtools console and
-  // post `{action:'START_RECORDING'}` directly, and any disabled button in the
-  // UI is irrelevant to that. This is the only code path into a recording — the
-  // content script is injected by the branch below and captures nothing until
-  // it is activated from here — so refusing at this line refuses everywhere.
-  //
-  // Deliberately a local token check rather than a call to the backend: the
-  // recorder has to start on a customer network that may not have a route to
-  // the server at that moment, and revalidation on popup open is what keeps the
-  // local answer honest.
-  if (!(await auth.isAuthenticated())) {
-    return { success: false, error: 'Sign in before recording.', unauthenticated: true };
-  }
+  try {
+    if (!(await auth.isAuthenticated())) {
+      return { success: false, error: 'Sign in before recording.', unauthenticated: true };
+    }
 
   // THE SECOND GATE, and it is here for the same reason as the first: the popup
   // can be bypassed, so a disabled Start button is not a rule.
@@ -455,14 +458,23 @@ async function startRecording(msg, patches) {
   await broadcast(msg.tabId, '__flowtrace_activate__', { patchId });
 
   return { success: true, environment, session: session.forTransport() };
+} finally {
+  if (!isSelfHolder) {
+    session.releaseLaunchReservation('popup_start');
+  }
+}
 }
 
 async function platformLaunchSession(msg, patches) {
-  if (session.get().isRecording || session.isLaunchInProgress()) {
+  const holder = 'platform_launch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  if (!session.acquireLaunchReservation(holder)) {
     return { success: false, error: 'Recording or launch already in progress.' };
   }
 
-  // 1. Sync token & user from Platform if provided
+  let tab = null;
+
+  try {
+    // 1. Sync token & user from Platform if provided
   if (msg.token) {
     try {
       await auth.setSessionToken(msg.token, msg.user || null);
@@ -546,6 +558,7 @@ async function platformLaunchSession(msg, patches) {
     tabId: tab.id,
     tabUrl: currentTabUrl,
     patchId,
+    _reservationHolder: holder,
   }, patches);
 
   // SUCCESS IS DERIVED FROM startRecording, NOT ASSERTED.
@@ -575,19 +588,21 @@ async function platformLaunchSession(msg, patches) {
     environment: await getEnvironment(),
     startResult,
   };
+} finally {
+  session.releaseLaunchReservation(holder);
+}
 }
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function flowtraceLaunchIntent(msg, sender, patches) {
-  const s = session.get();
-  if (s.isRecording) {
+  if (session.get().isRecording) {
     return { success: false, error: 'Recording already in progress.' };
   }
 
-  // 1. Single-flight launch reservation mutex
-  if (!session.acquireLaunchReservation()) {
+  const holder = 'flowtrace_launch_' + (msg?.intentId || Date.now());
+  if (!session.acquireLaunchReservation(holder)) {
     return { success: false, error: 'Recording or launch already in progress.' };
   }
 
@@ -759,7 +774,7 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
       environmentId: claimData.environmentId,
     };
   } finally {
-    session.releaseLaunchReservation();
+    session.releaseLaunchReservation(holder);
   }
 }
 

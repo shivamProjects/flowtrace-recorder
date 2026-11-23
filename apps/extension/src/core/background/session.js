@@ -51,22 +51,31 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
   };
 }
 
-let launchInProgress = false;
+let launchReservationHolder = null;
 
-export function acquireLaunchReservation() {
-  if (launchInProgress || session.isRecording) {
+export function acquireLaunchReservation(holder = 'exclusive') {
+  if (session.isRecording) {
     return false;
   }
-  launchInProgress = true;
+  if (launchReservationHolder !== null && launchReservationHolder !== holder) {
+    return false;
+  }
+  launchReservationHolder = holder;
   return true;
 }
 
-export function releaseLaunchReservation() {
-  launchInProgress = false;
+export function releaseLaunchReservation(holder = 'exclusive') {
+  if (launchReservationHolder === holder || holder === 'force') {
+    launchReservationHolder = null;
+  }
 }
 
 export function isLaunchInProgress() {
-  return launchInProgress;
+  return launchReservationHolder !== null;
+}
+
+export function isLaunchInProgressFor(holder) {
+  return launchReservationHolder !== null && launchReservationHolder === holder;
 }
 
 let session = blankSession();
@@ -232,7 +241,7 @@ export async function flush() {
 }
 
 export async function clear() {
-  launchInProgress = false;
+  launchReservationHolder = null;
   if (lifecycleObservers) {
     lifecycleObservers.stop();
   }
