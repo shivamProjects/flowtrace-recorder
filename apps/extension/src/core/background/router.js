@@ -225,6 +225,7 @@ export function createRouter(patches) {
       version: '1.0.0',
       authenticated: await auth.isAuthenticated(),
       isRecording: session.get().isRecording,
+      isLaunchInProgress: session.isLaunchInProgress(),
     }),
 
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
@@ -365,6 +366,7 @@ export function createExternalRouter(patches) {
       capabilities: ['launch_intent_v1'],
       authenticated: await auth.isAuthenticated(),
       isRecording: session.get().isRecording,
+      isLaunchInProgress: session.isLaunchInProgress(),
     }),
     GET_STATUS: () => ({ session: session.forTransport() }),
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
@@ -387,6 +389,10 @@ export function createExternalRouter(patches) {
 
 
 async function startRecording(msg, patches) {
+  if (session.get().isRecording || session.isLaunchInProgress()) {
+    return { success: false, error: 'Recording or launch already in progress.' };
+  }
+
   // THE GATE. It is here, in the service worker, and not in the popup, because
   // the popup is a web page: anyone can open the worker's devtools console and
   // post `{action:'START_RECORDING'}` directly, and any disabled button in the
@@ -417,10 +423,6 @@ async function startRecording(msg, patches) {
       error: 'Choose an environment before recording — recordings cannot be saved without one.',
       environmentRequired: true,
     };
-  }
-
-  if (session.get().isRecording) {
-    return { success: false, error: 'Recording already in progress.' };
   }
 
   const patchId = patches.hasPatch(msg.patchId) ? msg.patchId : session.get().patchId;
@@ -456,6 +458,10 @@ async function startRecording(msg, patches) {
 }
 
 async function platformLaunchSession(msg, patches) {
+  if (session.get().isRecording || session.isLaunchInProgress()) {
+    return { success: false, error: 'Recording or launch already in progress.' };
+  }
+
   // 1. Sync token & user from Platform if provided
   if (msg.token) {
     try {
@@ -720,13 +726,23 @@ async function flowtraceLaunchIntent(msg, sender, patches) {
     // 6. Wait for tab load and inject scripts with deterministic failure cleanup
     try {
       await waitForTabComplete(tab.id, 10_000);
-      await inject(tab.id);
-      await broadcast(tab.id, '__flowtrace_activate__', { patchId });
+      await injectStrict(tab.id);
+
+      // Verify content script activation acknowledgement
+      const ack = await chrome.tabs.sendMessage(tab.id, {
+        action: 'ACTIVATE_RECORDING',
+        patchId,
+      });
+      if (!ack || ack.ok !== true) {
+        throw new Error('Content script activation acknowledgement failed or was not received.');
+      }
+      await broadcastStrict(tab.id, '__flowtrace_activate__', { patchId });
     } catch (activationErr) {
-      // Deterministic cleanup on failure: close opened tab and clear mutated session
+      // Deterministic cleanup on failure: close opened tab, stop observers, and clear mutated session
       if (tab?.id) {
         await chrome.tabs.remove(tab.id).catch(() => {});
       }
+      session.getLifecycleObservers()?.stop();
       await session.clear();
       return {
         success: false,
@@ -878,4 +894,21 @@ async function broadcast(tabId, eventName, detail) {
   } catch {
     // Tab may have navigated or closed; nothing to do.
   }
+}
+
+async function injectStrict(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ['selector-engine.js', 'content.js'],
+  });
+}
+
+async function broadcastStrict(tabId, eventName, detail) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: (name, payload) => {
+      window.dispatchEvent(new CustomEvent(name, { detail: payload }));
+    },
+    args: [eventName, detail || null],
+  });
 }

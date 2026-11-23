@@ -5,6 +5,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 let createExternalRouter;
+let createRouter;
 let session;
 let patches;
 let uploadRecording;
@@ -37,11 +38,20 @@ function installChrome() {
       executeScript: vi.fn(async () => []),
     },
     tabs: {
-      sendMessage: vi.fn(async () => ({})),
+      sendMessage: vi.fn(async (tabId, msg) => {
+        if (msg?.action === 'ACTIVATE_RECORDING') {
+          return { ok: true };
+        }
+        return {};
+      }),
       create: vi.fn(async ({ url }) => {
         const tab = { id: ++tabIdCounter, url, status: 'complete' };
         tabsList.push(tab);
         return tab;
+      }),
+      remove: vi.fn(async (id) => {
+        const idx = tabsList.findIndex((t) => t.id === id);
+        if (idx !== -1) tabsList.splice(idx, 1);
       }),
       get: vi.fn(async (id) => tabsList.find((t) => t.id === id) || { id, url: 'about:blank', status: 'complete' }),
       query: vi.fn(async () => tabsList),
@@ -60,7 +70,7 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
     vi.resetModules();
     installChrome();
 
-    ({ createExternalRouter } = await import('../src/core/background/router.js'));
+    ({ createExternalRouter, createRouter } = await import('../src/core/background/router.js'));
     session = await import('../src/core/background/session.js');
     ({ uploadRecording } = await import('../src/core/background/upload.js'));
     patches = await import('@flowtrace/recorder-core');
@@ -274,6 +284,136 @@ describe('REC-2 / TRACE-93: FlowTrace Extension LaunchIntent Bridge', () => {
           files: ['selector-engine.js', 'content.js'],
         }),
       );
+    });
+
+    it('cleans up session, tab, and observers when executeScript injection rejects', async () => {
+      const claimPayload = {
+        intentId: '55555555-5555-4555-8555-555555555555',
+        targetUrl: 'https://restricted.example.com',
+        patchId: 'generic',
+        environmentId: '44444444-4444-4444-8444-444444444444',
+        uploadToken: 'raw-upload-token-secret-1234',
+        signedUploadEnvelope: 'signed.upload.envelope.token',
+        uploadExpiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      };
+
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => claimPayload,
+      }));
+
+      // Simulate executeScript rejecting (e.g. restricted chrome:// or policy block)
+      chrome.scripting.executeScript.mockRejectedValueOnce(
+        new Error('Cannot script restricted origin'),
+      );
+
+      const router = createExternalRouter(patches);
+      const res = await router(
+        {
+          action: 'FLOWTRACE_LAUNCH_INTENT',
+          intentId: '55555555-5555-4555-8555-555555555555',
+          token: 'raw-claim-token',
+          signedEnvelope: 'signed.claim.envelope',
+          apiBase: 'http://localhost:3200',
+        },
+        VALID_EXTERNAL_SENDER,
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/Failed to activate recording in target tab: Cannot script restricted origin/i);
+
+      // Session must be completely cleared
+      const s = session.get();
+      expect(s.isRecording).toBe(false);
+      expect(s.uploadContext).toBeNull();
+      expect(session.isLaunchInProgress()).toBe(false);
+      expect(chrome.tabs.remove).toHaveBeenCalled();
+    });
+
+    it('cleans up session, tab, and observers when content activation ACK fails or is negative', async () => {
+      const claimPayload = {
+        intentId: '66666666-6666-4666-8666-666666666666',
+        targetUrl: 'https://example.com/app',
+        patchId: 'generic',
+        environmentId: '44444444-4444-4444-8444-444444444444',
+        uploadToken: 'raw-upload-token-secret-1234',
+        signedUploadEnvelope: 'signed.upload.envelope.token',
+        uploadExpiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      };
+
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => claimPayload,
+      }));
+
+      // Content script replies with negative ACK or fails
+      chrome.tabs.sendMessage.mockResolvedValueOnce({ ok: false });
+
+      const router = createExternalRouter(patches);
+      const res = await router(
+        {
+          action: 'FLOWTRACE_LAUNCH_INTENT',
+          intentId: '66666666-6666-4666-8666-666666666666',
+          token: 'raw-claim-token',
+          signedEnvelope: 'signed.claim.envelope',
+          apiBase: 'http://localhost:3200',
+        },
+        VALID_EXTERNAL_SENDER,
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/activation acknowledgement failed/i);
+
+      const s = session.get();
+      expect(s.isRecording).toBe(false);
+      expect(s.uploadContext).toBeNull();
+      expect(session.isLaunchInProgress()).toBe(false);
+      expect(chrome.tabs.remove).toHaveBeenCalled();
+    });
+  });
+
+  describe('Competing Launch & Reservation Isolation', () => {
+    it('refuses START_RECORDING and PLATFORM_LAUNCH_SESSION while launch reservation is held', async () => {
+      const internalRouter = createRouter(patches);
+      const externalRouter = createExternalRouter(patches);
+
+      // Acquire launch reservation (simulating in-flight intent claim / load)
+      expect(session.acquireLaunchReservation()).toBe(true);
+
+      try {
+        // 1. Popup / internal START_RECORDING must be rejected
+        const startRes = await internalRouter({
+          action: 'START_RECORDING',
+          tabId: 10,
+          tabUrl: 'https://example.com',
+        }, { url: `chrome-extension://${EXT_ID}/popup.html`, origin: `chrome-extension://${EXT_ID}` });
+
+        expect(startRes.success).toBe(false);
+        expect(startRes.error).toBe('Recording or launch already in progress.');
+
+        // 2. External PLATFORM_LAUNCH_SESSION must be rejected
+        const platformRes = await externalRouter({
+          action: 'PLATFORM_LAUNCH_SESSION',
+          targetUrl: 'https://example.com',
+        }, VALID_EXTERNAL_SENDER);
+
+        expect(platformRes.success).toBe(false);
+        expect(platformRes.error).toBe('Recording or launch already in progress.');
+
+        // 3. PING_EXTENSION must report isLaunchInProgress: true
+        const pingRes = await externalRouter({
+          action: 'PING_EXTENSION',
+        }, VALID_EXTERNAL_SENDER);
+
+        expect(pingRes.isLaunchInProgress).toBe(true);
+      } finally {
+        session.releaseLaunchReservation();
+      }
+
+      // After release, isLaunchInProgress must be false
+      expect(session.isLaunchInProgress()).toBe(false);
     });
   });
 
