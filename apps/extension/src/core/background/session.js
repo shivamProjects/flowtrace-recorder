@@ -38,6 +38,11 @@ export function blankSession(patchId = DEFAULT_PATCH_ID) {
      * in postProcess. The core never inspects its contents — it only merges.
      */
     patchContext: {},
+    /**
+     * Scoped upload context bound to a FlowTrace LaunchIntent.
+     * Contains uploadToken, signedUploadEnvelope, environmentId, intentId, apiBase.
+     */
+    uploadContext: null,
   };
 }
 

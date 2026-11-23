@@ -18,6 +18,7 @@ import {
   compileActions,
   compileScript,
   compileSteps,
+  apiErrorMessage,
 } from '@flowtrace/recorder-core';
 import * as session from './session.js';
 import { listEnvironments, uploadRecording } from './upload.js';
@@ -361,11 +362,13 @@ export function createExternalRouter(patches) {
       success: true,
       installed: true,
       version: '1.0.0',
+      capabilities: ['launch_intent_v1'],
       authenticated: await auth.isAuthenticated(),
       isRecording: session.get().isRecording,
     }),
     GET_STATUS: () => ({ session: session.forTransport() }),
     PLATFORM_LAUNCH_SESSION: (msg) => platformLaunchSession(msg, patches),
+    FLOWTRACE_LAUNCH_INTENT: (msg, sender) => flowtraceLaunchIntent(msg, sender, patches),
   };
 
   return async function externalRoute(msg, sender) {
@@ -565,6 +568,130 @@ async function platformLaunchSession(msg, patches) {
     targetUrl: currentTabUrl,
     environment: await getEnvironment(),
     startResult,
+  };
+}
+
+async function flowtraceLaunchIntent(msg, sender, patches) {
+  if (session.get().isRecording) {
+    return { success: false, error: 'Recording already in progress.' };
+  }
+
+  const intentId = msg?.intentId;
+  const token = msg?.token;
+  const signedEnvelope = msg?.signedEnvelope || msg?.envelope;
+
+  if (
+    !intentId ||
+    typeof intentId !== 'string' ||
+    !token ||
+    typeof token !== 'string' ||
+    !signedEnvelope ||
+    typeof signedEnvelope !== 'string'
+  ) {
+    return {
+      success: false,
+      error: 'Missing or invalid launch intent credentials (intentId, token, signedEnvelope).',
+    };
+  }
+
+  // Derive API base and enforce origin allowlist
+  const candidateBase = msg?.apiBase || sender?.origin || (await getApiBase());
+  const targetOrigin = safeOriginOf(candidateBase);
+  if (!targetOrigin || !TRUSTED_EXTERNAL_ORIGINS.has(targetOrigin)) {
+    return { success: false, error: 'Untrusted or invalid API base origin.' };
+  }
+
+  // Execute atomic claim against FlowTrace API
+  const claimUrl = `${targetOrigin.replace(/\/+$/, '')}/api/v1/recorder/launch-intents/${encodeURIComponent(intentId)}/claim`;
+  let claimRes;
+  try {
+    claimRes = await fetch(claimUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, signedEnvelope }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    return { success: false, error: `Could not reach FlowTrace server: ${err.message}` };
+  }
+
+  const claimJson = await claimRes.json().catch(() => null);
+  if (!claimRes.ok) {
+    const errorMsg =
+      claimJson?.error?.message ||
+      apiErrorMessage(claimJson, claimRes.status, 'Failed to claim launch intent.');
+    return {
+      success: false,
+      error: errorMsg,
+      code: claimJson?.error?.code,
+      status: claimRes.status,
+    };
+  }
+
+  const claimData = claimJson?.data || claimJson;
+  const targetUrl = claimData?.targetUrl;
+  if (
+    !targetUrl ||
+    typeof targetUrl !== 'string' ||
+    (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))
+  ) {
+    return { success: false, error: 'Invalid target URL returned from claim.' };
+  }
+
+  const patchId = patches?.hasPatch?.(claimData.patchId) ? claimData.patchId : 'generic';
+
+  // Open target browser tab
+  let tab;
+  try {
+    tab = await chrome.tabs.create({ url: targetUrl, active: true });
+  } catch (err) {
+    return { success: false, error: `Failed to open target tab: ${err.message}` };
+  }
+
+  if (!tab || !tab.id) {
+    return { success: false, error: 'Failed to create browser tab.' };
+  }
+
+  const next = session.blankSession(patchId);
+  next.isRecording = true;
+  next.activeTabId = tab.id;
+  next.startedAt = Date.now();
+  next.sourceUrl = targetUrl;
+  next.uploadContext = {
+    intentId: claimData.intentId || intentId,
+    environmentId: claimData.environmentId || null,
+    uploadToken: claimData.uploadToken,
+    signedUploadEnvelope: claimData.signedUploadEnvelope,
+    uploadExpiresAt: claimData.uploadExpiresAt,
+    apiBase: targetOrigin,
+  };
+
+  const surfaceRegistry = session.getSurfaceRegistry();
+  surfaceRegistry.clear();
+  surfaceRegistry.setSessionId(next.recordingSessionId);
+  surfaceRegistry.registerPrimary(tab.id, { url: targetUrl });
+
+  session.initLifecycleObservers(inject, broadcast).start();
+
+  const navEvent = makeNavigateEvent(targetUrl);
+  navEvent.surfaceId = surfaceRegistry.getByTabId(tab.id)?.surfaceId;
+  next.events.push(navEvent);
+
+  session.set(next);
+  await session.persist();
+
+  // Wait for tab load and inject scripts
+  await waitForTabComplete(tab.id, 10_000);
+  await inject(tab.id);
+  await broadcast(tab.id, '__flowtrace_activate__', { patchId });
+
+  return {
+    success: true,
+    intentId: claimData.intentId || intentId,
+    tabId: tab.id,
+    targetUrl,
+    environmentId: claimData.environmentId || null,
+    session: session.forTransport(),
   };
 }
 

@@ -75,6 +75,8 @@ export class FlowTraceDestination extends RecordingDestination {
    *   environment?: ?{ id: string, name?: string },
    *   apiBase?: string,
    *   token?: string,
+   *   uploadToken?: string,
+   *   uploadEnvelope?: string,
    *   timeoutMs?: number
    * }} ctx
    */
@@ -85,6 +87,8 @@ export class FlowTraceDestination extends RecordingDestination {
     environment,
     apiBase,
     token,
+    uploadToken,
+    uploadEnvelope,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   } = {}) {
     const base = (apiBase || '').replace(/\/+$/, '');
@@ -188,12 +192,16 @@ export class FlowTraceDestination extends RecordingDestination {
 
     let response;
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(uploadEnvelope ? { 'x-flowtrace-upload-envelope': uploadEnvelope } : {}),
+        ...(uploadToken ? { 'x-flowtrace-upload-token': uploadToken } : {}),
+      };
+
       response = await fetch(`${base}/api/v1/recordings`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers,
         body: JSON.stringify(canonicalEnvelope),
         signal: AbortSignal.timeout(timeoutMs),
       });
