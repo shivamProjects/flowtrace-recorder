@@ -239,7 +239,7 @@ export function mergePatchContext(partial) {
   }
 }
 
-/** The subset safe to hand to the popup and content scripts. */
+/** The subset safe to hand to the popup and internal extension UI. */
 export function forTransport() {
   return {
     isRecording: session.isRecording,
@@ -254,5 +254,15 @@ export function forTransport() {
     generatedCode: session.generatedCode,
     steps: session.steps,
     actions: session.actions,
+  };
+}
+
+/** The minimal, sanitized subset safe for content scripts (navigation reactivation only). Zero events/steps/code/secrets. */
+export function forContentScript() {
+  return {
+    isRecording: session.isRecording,
+    isPaused: !!session.isPaused,
+    patchId: session.patchId,
+    eventCount: session.events.length,
   };
 }

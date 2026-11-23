@@ -6,9 +6,13 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { createRouter } from '../src/core/background/router.js';
 import * as session from '../src/core/background/session.js';
 
+const EXT_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
+const UI_SENDER = { url: `chrome-extension://${EXT_ID}/popup.html` };
+
 function installChrome() {
   const store = {};
   globalThis.chrome = {
+    runtime: { id: EXT_ID },
     storage: {
       local: {
         get: async (keys) => {
@@ -43,19 +47,19 @@ describe('Router & Session Flow Enhancements', () => {
 
   it('handles PAUSE_RECORDING and RESUME_RECORDING state transitions', async () => {
     // When not recording, returns error
-    const errResp = await router({ action: 'PAUSE_RECORDING' });
+    const errResp = await router({ action: 'PAUSE_RECORDING' }, UI_SENDER);
     expect(errResp.success).toBe(false);
 
     // Simulate active recording
     session.get().isRecording = true;
     session.get().isPaused = false;
 
-    const pauseResp = await router({ action: 'PAUSE_RECORDING' });
+    const pauseResp = await router({ action: 'PAUSE_RECORDING' }, UI_SENDER);
     expect(pauseResp.success).toBe(true);
     expect(pauseResp.isPaused).toBe(true);
     expect(session.get().isPaused).toBe(true);
 
-    const resumeResp = await router({ action: 'RESUME_RECORDING' });
+    const resumeResp = await router({ action: 'RESUME_RECORDING' }, UI_SENDER);
     expect(resumeResp.success).toBe(true);
     expect(resumeResp.isPaused).toBe(false);
     expect(session.get().isPaused).toBe(false);
@@ -69,7 +73,7 @@ describe('Router & Session Flow Enhancements', () => {
     ];
 
     // Delete middle step (index 1)
-    const delResp = await router({ action: 'DELETE_STEP', index: 1 });
+    const delResp = await router({ action: 'DELETE_STEP', index: 1 }, UI_SENDER);
     expect(delResp.success).toBe(true);
     expect(delResp.eventCount).toBe(2);
     expect(delResp.events[0].label).toBe('Step 1');

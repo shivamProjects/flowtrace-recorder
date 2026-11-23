@@ -47,9 +47,13 @@ const ENVIRONMENT = {
   type: 'ORACLE_FUSION',
 };
 
+const EXT_ID = 'ijbehkijmihjnhbmbdmoglbbajbkadbd';
+const UI_SENDER = { url: `chrome-extension://${EXT_ID}/popup.html` };
+
 function installChrome() {
   const store = {};
   globalThis.chrome = {
+    runtime: { id: EXT_ID },
     storage: {
       local: {
         get: async (keys) => {
@@ -101,7 +105,7 @@ afterEach(() => {
   delete globalThis.fetch;
 });
 
-const route = (msg) => createRouter(patches)(msg, {});
+const route = (msg) => createRouter(patches)(msg, UI_SENDER);
 
 describe('PING_EXTENSION', () => {
   it('reports authenticated as a real boolean, never a Promise', async () => {
@@ -184,7 +188,7 @@ describe('PLATFORM_LAUNCH_SESSION reports what actually happened', () => {
 
       const res = await createRouter(patches)(
         { action: 'PLATFORM_LAUNCH_SESSION', targetUrl: 'https://erp.example/home' },
-        {},
+        UI_SENDER,
       );
       expect(res.success).toBe(res.startResult?.success === true);
     }
