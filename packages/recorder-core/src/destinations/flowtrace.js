@@ -99,8 +99,17 @@ export class FlowTraceDestination extends RecordingDestination {
     const recName = name || envelope?.name || defaultRecordingName(envelope?.patchId);
     const recDesc = description || envelope?.description || 'Recorded with FlowTrace';
 
-    // Canonical Protocol 2.0 payload construction
-    const rawSteps = envelope?.steps || envelope?.actions || [];
+    // Canonical Protocol 2.0 payload construction.
+    // upload.js passes `steps` from compileSteps() (which have `type: 'code'`), so prefer
+    // `envelope.actions` unless `envelope.steps` already contains semantic steps.
+    const hasSemanticSteps =
+      Array.isArray(envelope?.steps) &&
+      envelope.steps.some((s) => s && (typeof s.action === 'string' || (typeof s.type === 'string' && s.type !== 'code')));
+    const rawSteps = hasSemanticSteps
+      ? envelope.steps
+      : (Array.isArray(envelope?.actions) && envelope.actions.length > 0
+        ? envelope.actions
+        : (envelope?.steps || []));
     const canonicalSteps = rawSteps.map((s) => {
       const act = s.action || s.type || 'click';
       const step = {
@@ -115,7 +124,13 @@ export class FlowTraceDestination extends RecordingDestination {
         ...(s.locator !== undefined
           ? { locator: s.locator }
           : (s.selector ? { locator: { selector: s.selector } } : {})),
-        effects: s.effects || [],
+        effects: Array.isArray(s.effects)
+          ? s.effects.map((eff) => ({
+              ...eff,
+              type: eff.type || eff.kind || 'effect',
+              ...(eff.targetUrl === undefined && eff.url ? { targetUrl: eff.url } : {}),
+            }))
+          : [],
         meta: s.meta || {},
       };
 
