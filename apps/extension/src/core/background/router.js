@@ -19,7 +19,7 @@ import {
   compileScript,
   compileSteps,
   apiErrorMessage,
-} from '@flowtrace/recorder-core';
+} from '@flowtrace/recorder-core/worker';
 import * as session from './session.js';
 import { listEnvironments, uploadRecording } from './upload.js';
 

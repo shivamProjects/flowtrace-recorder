@@ -6,7 +6,7 @@
  * of which applications are supported.
  */
 
-import { getPatch, hasPatch, listPatches } from '@flowtrace/recorder-core';
+import { getPatch, hasPatch, listPatches } from '@flowtrace/recorder-core/worker';
 import { createRouter, createExternalRouter } from './router.js';
 import * as session from './session.js';
 
