@@ -116,6 +116,53 @@ describe('Recorder Destination Architecture', () => {
   describe('FlowTraceDestination', () => {
     const destination = new FlowTraceDestination();
 
+    it('prefers semantic actions when envelope.steps contains compiled code previews (type: code)', async () => {
+      let capturedBody = null;
+      routes['/api/v1/recordings'] = (init) => {
+        capturedBody = JSON.parse(init.body);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ recording: { id: 'rec_code_1' } }),
+        };
+      };
+
+      const compiledEnvelope = makeEnvelope({
+        name: 'Compiled Preview Test',
+        sourceUrl: 'http://127.0.0.1:4000/cert-target',
+        patchId: 'generic',
+        actions: [
+          { type: 'navigate', url: 'http://127.0.0.1:4000/cert-target' },
+          { type: 'fill', selector: '#cert-input', value: 'Test Order 101' },
+          {
+            type: 'click',
+            selector: '#cert-submit',
+            effects: [{ kind: 'navigation', url: 'http://127.0.0.1:4000/done', timestamp: 12345 }],
+          },
+        ],
+        steps: [
+          { type: 'code', actionIndex: 0, code: "page.goto('http://127.0.0.1:4000/cert-target')" },
+          { type: 'code', actionIndex: 1, code: "page.locator('#cert-input').fill('Test Order 101')" },
+          { type: 'code', actionIndex: 2, code: "page.locator('#cert-submit').click()" },
+        ],
+      });
+
+      const res = await destination.uploadRecording({
+        envelope: compiledEnvelope,
+        apiBase: 'http://localhost:3200',
+        uploadEnvelope: 'env_1',
+        uploadToken: 'tok_1',
+      });
+
+      expect(res.success).toBe(true);
+      expect(capturedBody.protocolVersion).toBe('2.0');
+      expect(capturedBody.steps.map((s) => s.action)).toEqual(['navigate', 'fill', 'click']);
+      expect(capturedBody.steps[2].effects[0]).toMatchObject({
+        type: 'navigation',
+        targetUrl: 'http://127.0.0.1:4000/done',
+      });
+    });
+
     it('uploads canonical Protocol 2.0 RecordingEnvelope to /api/v1/recordings', async () => {
       routes['/api/v1/recordings'] = (init) => {
         const body = JSON.parse(init.body);
