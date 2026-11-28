@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "FlowTrace Pure Observational Capture Engine, Targeting, Correlator, and Component Adapters",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./worker": "./src/worker.js"
+  },
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

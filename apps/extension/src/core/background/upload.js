@@ -19,7 +19,7 @@ import {
   getDestinationType,
   createDestination,
   getEnvironment,
-} from '@flowtrace/recorder-core';
+} from '@flowtrace/recorder-core/worker';
 import * as session from './session.js';
 
 const REQUEST_TIMEOUT_MS = 3_000;

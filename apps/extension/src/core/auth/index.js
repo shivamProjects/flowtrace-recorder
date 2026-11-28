@@ -31,7 +31,7 @@
  * not echo them back either.
  */
 
-import { apiErrorMessage, apiUrl, unwrap, setEnvironment } from '@flowtrace/recorder-core';
+import { apiErrorMessage, apiUrl, unwrap, setEnvironment } from '@flowtrace/recorder-core/worker';
 import * as store from './store.js';
 
 /** How long to wait on the backend before deciding the network is the problem. */
